@@ -83,10 +83,20 @@ export const attentionAlertSchema = z.object({
 });
 export type AttentionAlert = z.infer<typeof attentionAlertSchema>;
 
+export const distributionSchema = z.object({
+  liquid: decimalString,
+  invested: decimalString,
+  realEstate: decimalString,
+  other: decimalString,
+  liabilities: decimalString,
+});
+export type Distribution = z.infer<typeof distributionSchema>;
+
 export const dashboardSchema = z.object({
   kpis: kpiSchema,
   netWorthSeries: z.array(netWorthPointSchema),
   cashFlowSeries: z.array(cashFlowMonthSchema),
+  distribution: distributionSchema,
   upcomingEvents: z.array(upcomingEventSchema),
   insights: z.array(dashboardInsightSchema),
   alerts: z.array(attentionAlertSchema),

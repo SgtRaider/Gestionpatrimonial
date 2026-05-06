@@ -3,10 +3,55 @@
 
 import type { Dashboard } from '@gp/shared';
 
+// Helper: build a net-worth point with breakdown that sums to (assets - liabilities).
+function point(
+  date: string,
+  liquid: number,
+  invested: number,
+  realEstate: number,
+  other: number,
+  liabilities: number,
+) {
+  const assets = liquid + invested + realEstate + other;
+  const netWorth = assets - liabilities;
+  return {
+    date,
+    netWorth: netWorth.toFixed(2),
+    assets: assets.toFixed(2),
+    liabilities: liabilities.toFixed(2),
+    breakdown: {
+      liquid: liquid.toFixed(2),
+      invested: invested.toFixed(2),
+      realEstate: realEstate.toFixed(2),
+      other: other.toFixed(2),
+    },
+  };
+}
+
+const netWorthSeries = [
+  point('2025-06-01', 24500, 38200, 145000, 2300, 131800),
+  point('2025-07-01', 25100, 39400, 145000, 2300, 131500),
+  point('2025-08-01', 26200, 40850, 145000, 2300, 131200),
+  point('2025-09-01', 27300, 41950, 145000, 2300, 130800),
+  point('2025-10-01', 27800, 42950, 145000, 2400, 130500),
+  point('2025-11-01', 27500, 43800, 145000, 2400, 130200),
+  point('2025-12-01', 28100, 44600, 145000, 2400, 129900),
+  point('2026-01-01', 28400, 45350, 145000, 2400, 129600),
+  point('2026-02-01', 28200, 45980, 145000, 2400, 129300),
+  point('2026-03-01', 28600, 46550, 145000, 2400, 128950),
+  point('2026-04-01', 27900, 46140, 145000, 2400, 128600),
+  point('2026-05-01', 28100, 47200, 145000, 2400, 128280),
+];
+
+const latest = netWorthSeries[netWorthSeries.length - 1];
+if (!latest?.breakdown) {
+  throw new Error('Fixture invariant: latest net worth point must have breakdown');
+}
+
 export const dashboardFixture: Dashboard = {
   kpis: {
     netWorth: {
-      value: '87420.00',
+      value: latest.netWorth,
       delta30d: '2180.00',
       deltaPct30d: '2.6',
     },
@@ -24,20 +69,7 @@ export const dashboardFixture: Dashboard = {
       scheduledAt: '2026-05-14',
     },
   },
-  netWorthSeries: [
-    { date: '2025-06-01', netWorth: '78200.00' },
-    { date: '2025-07-01', netWorth: '79100.00' },
-    { date: '2025-08-01', netWorth: '80450.00' },
-    { date: '2025-09-01', netWorth: '81900.00' },
-    { date: '2025-10-01', netWorth: '83100.00' },
-    { date: '2025-11-01', netWorth: '83400.00' },
-    { date: '2025-12-01', netWorth: '84200.00' },
-    { date: '2026-01-01', netWorth: '84850.00' },
-    { date: '2026-02-01', netWorth: '85240.00' },
-    { date: '2026-03-01', netWorth: '85800.00' },
-    { date: '2026-04-01', netWorth: '85240.00' },
-    { date: '2026-05-01', netWorth: '87420.00' },
-  ],
+  netWorthSeries,
   cashFlowSeries: [
     { month: '2025-06', income: '2450.00', expenses: '-1820.00', net: '630.00' },
     { month: '2025-07', income: '2450.00', expenses: '-1950.00', net: '500.00' },
@@ -52,6 +84,13 @@ export const dashboardFixture: Dashboard = {
     { month: '2026-04', income: '2450.00', expenses: '-2830.00', net: '-380.00' },
     { month: '2026-05', income: '2450.00', expenses: '-1210.00', net: '1240.00' },
   ],
+  distribution: {
+    liquid: latest.breakdown.liquid,
+    invested: latest.breakdown.invested,
+    realEstate: latest.breakdown.realEstate,
+    other: latest.breakdown.other,
+    liabilities: latest.liabilities ?? '0',
+  },
   upcomingEvents: [
     {
       id: 'evt-1',
@@ -69,10 +108,24 @@ export const dashboardFixture: Dashboard = {
     },
     {
       id: 'evt-3',
+      label: 'Spotify',
+      scheduledAt: '2026-05-22',
+      amount: '-10.99',
+      kind: 'recurring',
+    },
+    {
+      id: 'evt-4',
       label: 'Nómina',
       scheduledAt: '2026-05-28',
       amount: '2450.00',
       kind: 'recurring',
+    },
+    {
+      id: 'evt-5',
+      label: 'ITV coche',
+      scheduledAt: '2026-06-03',
+      amount: '-45.00',
+      kind: 'planned',
     },
   ],
   insights: [
