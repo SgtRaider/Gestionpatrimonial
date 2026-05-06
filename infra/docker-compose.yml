@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: gp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-gp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-gp_password}
+      POSTGRES_DB: ${POSTGRES_DB:-gestionpatrimonial}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gp_user} -d ${POSTGRES_DB:-gestionpatrimonial}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Production profile only — api, web, caddy.
+  # Local dev runs api and web on the host (pnpm --filter api dev / pnpm --filter web dev)
+  # to avoid node_modules-in-container pain.
+
+  api:
+    profiles: ["prod"]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    container_name: gp-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://${POSTGRES_USER:-gp_user}:${POSTGRES_PASSWORD:-gp_password}@postgres:5432/${POSTGRES_DB:-gestionpatrimonial}
+      API_PORT: 8000
+      API_HOST: 0.0.0.0
+      JWT_SECRET: ${JWT_SECRET:?required in prod}
+      CORS_ORIGIN: ${CORS_ORIGIN:-https://gestionpatrimonial.example}
+    expose:
+      - "8000"
+
+  web:
+    profiles: ["prod"]
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    container_name: gp-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${PUBLIC_API_URL:-https://gestionpatrimonial.example}
+    expose:
+      - "3000"
+
+  caddy:
+    profiles: ["prod"]
+    image: caddy:2-alpine
+    container_name: gp-caddy
+    restart: unless-stopped
+    depends_on:
+      - api
+      - web
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:

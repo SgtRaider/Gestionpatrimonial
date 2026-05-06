@@ -1,0 +1,56 @@
+import { z } from 'zod';
+import {
+  categoryKindSchema,
+  transactionSourceSchema,
+  transactionStatusSchema,
+} from '../enums.js';
+
+export const decimalString = z
+  .string()
+  .regex(/^-?\d+(\.\d+)?$/, 'Must be a numeric string (precision-safe)');
+
+export const categorySchema = z.object({
+  id: z.string().uuid(),
+  parentId: z.string().uuid().nullable(),
+  name: z.string(),
+  kind: categoryKindSchema,
+  color: z.string().nullable(),
+  iconKey: z.string().nullable(),
+});
+export type Category = z.infer<typeof categorySchema>;
+
+export const transactionSchema = z.object({
+  id: z.string().uuid(),
+  accountId: z.string().uuid(),
+  bookedAt: z.string().datetime(),
+  valueAt: z.string().datetime().nullable(),
+  amount: decimalString,
+  currency: z.string().length(3),
+  amountBaseCurrency: decimalString.nullable(),
+  descriptionRaw: z.string(),
+  counterparty: z.string().nullable(),
+  normalizedMerchant: z.string().nullable(),
+  merchantAliasUser: z.string().nullable(),
+  categoryId: z.string().uuid().nullable(),
+  status: transactionStatusSchema,
+  source: transactionSourceSchema,
+  transferPairId: z.string().uuid().nullable(),
+  parentTransactionId: z.string().uuid().nullable(),
+  recurringRuleId: z.string().uuid().nullable(),
+  notes: z.string().nullable(),
+  isProjection: z.boolean(),
+});
+export type Transaction = z.infer<typeof transactionSchema>;
+
+export const transactionListQuerySchema = z.object({
+  from: z.string().date().optional(),
+  to: z.string().date().optional(),
+  accountIds: z.array(z.string().uuid()).optional(),
+  categoryIds: z.array(z.string().uuid()).optional(),
+  status: transactionStatusSchema.optional(),
+  uncategorized: z.boolean().optional(),
+  search: z.string().optional(),
+  page: z.number().int().min(1).default(1),
+  pageSize: z.number().int().min(1).max(200).default(50),
+});
+export type TransactionListQuery = z.infer<typeof transactionListQuerySchema>;
