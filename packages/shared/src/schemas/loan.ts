@@ -42,6 +42,17 @@ export const loanPaymentMatchSchema = z.object({
 });
 export type LoanPaymentMatch = z.infer<typeof loanPaymentMatchSchema>;
 
+// `recorded`: the rate at this review came from `loan_rate_history` (past
+// real review, or a future one the user already entered).
+// `projected`: variable/mixed loan anniversary with no recorded rate yet —
+// the engine carried forward the last known rate. Will resolve into the new
+// Euribor + spread once the review actually happens.
+export const loanRateReviewSchema = z.object({
+  rate: decimalString,
+  kind: z.enum(['recorded', 'projected']),
+});
+export type LoanRateReview = z.infer<typeof loanRateReviewSchema>;
+
 export const loanScheduleRowSchema = z.object({
   period: z.number().int().positive(),
   dueAt: z.string().date(),
@@ -51,6 +62,7 @@ export const loanScheduleRowSchema = z.object({
   outstandingAfter: decimalString,
   rateApplied: decimalString,
   matchedPayment: loanPaymentMatchSchema.nullable(),
+  rateReview: loanRateReviewSchema.nullable(),
 });
 export type LoanScheduleRow = z.infer<typeof loanScheduleRowSchema>;
 

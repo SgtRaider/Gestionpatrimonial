@@ -1,7 +1,7 @@
 // Shared helpers around the amortization engine and the loans tables.
 // Used by both the /api/loans routes and the insights generator.
 
-import type { LoanPaymentMatch, LoanScheduleRow } from '@gp/shared';
+import type { LoanPaymentMatch, LoanRateReview, LoanScheduleRow } from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import type { loanRateHistory, loans } from '../db/schema.js';
 import { type AmortizationRow, type RateChange, generateSchedule } from './amortization.js';
@@ -84,7 +84,7 @@ export function matchLoanPayments(
       if (!best || diffDays < best.diffDays) best = { tx, diffDays };
     }
 
-    if (!best) return { ...row, matchedPayment: null };
+    if (!best) return { ...row, matchedPayment: null, rateReview: null };
     usedTxIds.add(best.tx.id);
     return {
       ...row,
@@ -94,6 +94,7 @@ export function matchLoanPayments(
         actualPayment: new Decimal(best.tx.amount).abs().toFixed(2),
         descriptionRaw: best.tx.descriptionRaw,
       },
+      rateReview: null,
     };
   });
 
@@ -107,4 +108,47 @@ export function matchLoanPayments(
     }));
 
   return { rows, orphans };
+}
+
+// Build a per-period map of rate-review markers. `recorded` reviews come from
+// `loan_rate_history` (real past reviews + any user-entered future ones).
+// `projected` reviews are synthesised at each anniversary of the start date
+// for variable/mixed loans where the user hasn't recorded the new rate yet —
+// the engine carries the last rate forward, but flagging the period lets the
+// UI signal "this is when Euribor + diferencial would actually reset".
+export function buildRateReviewMarkers(
+  loan: typeof loans.$inferSelect,
+  rateRows: (typeof loanRateHistory.$inferSelect)[],
+  schedule: AmortizationRow[],
+): Map<number, LoanRateReview> {
+  const markers = new Map<number, LoanRateReview>();
+  const periodByMonth = new Map<string, AmortizationRow>();
+  for (const row of schedule) {
+    periodByMonth.set(row.dueAt.slice(0, 7), row);
+  }
+
+  for (const r of rateRows) {
+    const monthKey = new Date(r.effectiveAt).toISOString().slice(0, 7);
+    const row = periodByMonth.get(monthKey);
+    if (row) markers.set(row.period, { rate: r.rate, kind: 'recorded' });
+  }
+
+  if (loan.rateType !== 'fixed' && loan.reviewFrequencyMonths && loan.reviewFrequencyMonths > 0) {
+    const start = new Date(loan.startedAt);
+    for (
+      let offset = loan.reviewFrequencyMonths;
+      offset <= loan.termMonths;
+      offset += loan.reviewFrequencyMonths
+    ) {
+      const reviewDate = new Date(start);
+      reviewDate.setUTCMonth(reviewDate.getUTCMonth() + offset);
+      const monthKey = reviewDate.toISOString().slice(0, 7);
+      const row = periodByMonth.get(monthKey);
+      if (!row) continue;
+      if (markers.has(row.period)) continue;
+      markers.set(row.period, { rate: row.rateApplied, kind: 'projected' });
+    }
+  }
+
+  return markers;
 }

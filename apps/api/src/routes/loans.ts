@@ -16,7 +16,11 @@ import {
   simulatePrepayment,
   summarizeSchedule,
 } from '../services/amortization.js';
-import { buildSchedule, matchLoanPayments } from '../services/loan-helpers.js';
+import {
+  buildRateReviewMarkers,
+  buildSchedule,
+  matchLoanPayments,
+} from '../services/loan-helpers.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
@@ -133,6 +137,11 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
       );
 
     const matched = matchLoanPayments(schedule, txs);
+    const reviewMarkers = buildRateReviewMarkers(data.loan, data.rateRows, schedule);
+    const enrichedRows = matched.rows.map((row) => ({
+      ...row,
+      rateReview: reviewMarkers.get(row.period) ?? null,
+    }));
 
     const detail: LoanDetail = {
       ...summary,
@@ -140,7 +149,7 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
       prepaymentFeePct: data.loan.prepaymentFeePct,
       fiscalDeductible: data.loan.fiscalDeductible,
       notes: data.loan.notes,
-      schedule: matched.rows,
+      schedule: enrichedRows,
       rateHistory: data.rateRows.map((r) => ({
         effectiveAt: toIsoDate(r.effectiveAt),
         rate: r.rate,

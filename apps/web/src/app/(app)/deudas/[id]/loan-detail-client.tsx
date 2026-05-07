@@ -254,6 +254,7 @@ function Body({ loan }: { loan: LoanDetail }) {
                 const past = row.period <= loan.lastPaidPeriod;
                 const isNext = row.period === loan.lastPaidPeriod + 1;
                 const matched = row.matchedPayment;
+                const review = row.rateReview;
                 const missed = past && !matched;
                 const expected = Number(row.payment);
                 const actual = matched ? Number(matched.actualPayment) : 0;
@@ -285,7 +286,28 @@ function Body({ loan }: { loan: LoanDetail }) {
                     }
                   >
                     <td className="px-2 py-1.5 text-right tabular-nums">{row.period}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap">{formatMonth(row.dueAt)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1">
+                        {formatMonth(row.dueAt)}
+                        {review ? (
+                          <span
+                            className={cn(
+                              'text-[10px] px-1 py-0.5 rounded',
+                              review.kind === 'recorded'
+                                ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent)]'
+                                : 'bg-[var(--color-muted)]/15 text-[var(--color-muted)]',
+                            )}
+                            title={
+                              review.kind === 'recorded'
+                                ? `Revisión registrada: ${formatPct(review.rate)}`
+                                : `Revisión proyectada (Euribor + diferencial): mantiene ${formatPct(review.rate)} hasta que el banco actualice el tipo`
+                            }
+                          >
+                            📅 {formatPct(review.rate)}
+                          </span>
+                        ) : null}
+                      </span>
+                    </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       <div>{formatEur(row.payment)}</div>
                       {matched && Math.abs(delta) >= 0.01 ? (
