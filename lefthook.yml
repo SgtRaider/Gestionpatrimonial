@@ -3,6 +3,13 @@ pre-commit:
   commands:
     biome:
       glob: "*.{js,jsx,ts,tsx,json,css}"
-      run: pnpm exec biome check --write {staged_files} && git add {staged_files}
-    typecheck:
-      run: pnpm typecheck
+      run: npx --no-install biome check --write {staged_files} && git add {staged_files}
+    typecheck-api:
+      glob: "apps/api/**/*.{ts,tsx}"
+      run: npx --no-install tsc -p apps/api/tsconfig.json --noEmit
+    typecheck-web:
+      glob: "apps/web/**/*.{ts,tsx}"
+      run: npx --no-install tsc -p apps/web/tsconfig.json --noEmit
+    typecheck-shared:
+      glob: "packages/shared/**/*.{ts,tsx}"
+      run: npx --no-install tsc -p packages/shared/tsconfig.json --noEmit
