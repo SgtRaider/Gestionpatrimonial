@@ -27,7 +27,7 @@ export function TransactionDetail({
 }) {
   if (!tx) {
     return (
-      <Card className="h-full sticky top-20">
+      <Card>
         <div className="text-sm text-[var(--color-muted)] py-12 text-center">
           Selecciona un movimiento para ver el detalle.
         </div>
@@ -36,7 +36,7 @@ export function TransactionDetail({
   }
 
   return (
-    <Card className="h-full sticky top-20 space-y-4">
+    <Card className="space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="text-xs uppercase tracking-wide text-[var(--color-muted)]">Detalle</div>

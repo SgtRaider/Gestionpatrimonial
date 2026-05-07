@@ -422,15 +422,19 @@ export function MovimientosClient() {
         </div>
 
         <div className="hidden xl:block">
-          <TransactionDetail
-            tx={selected}
-            onClose={() => setSelectedId(null)}
-            onMarkRecurring={(tx) => setRecurringSelection([tx])}
-            onUnlinkRecurring={(tx) => unlinkRecurringMutation.mutate({ transactionIds: [tx.id] })}
-            isRecurringPending={
-              markRecurringMutation.isPending || unlinkRecurringMutation.isPending
-            }
-          />
+          <div className="sticky top-20">
+            <TransactionDetail
+              tx={selected}
+              onClose={() => setSelectedId(null)}
+              onMarkRecurring={(tx) => setRecurringSelection([tx])}
+              onUnlinkRecurring={(tx) =>
+                unlinkRecurringMutation.mutate({ transactionIds: [tx.id] })
+              }
+              isRecurringPending={
+                markRecurringMutation.isPending || unlinkRecurringMutation.isPending
+              }
+            />
+          </div>
         </div>
       </div>
 
