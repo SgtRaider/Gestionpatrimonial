@@ -371,7 +371,7 @@ export function MovimientosClient() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4 items-start">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4">
         <div className="space-y-3">
           {txQuery.isLoading ? (
             <div className="p-12 text-center text-[var(--color-muted)]">Cargando…</div>
