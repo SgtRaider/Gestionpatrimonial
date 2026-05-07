@@ -10,6 +10,7 @@ import { importsRoutes } from './routes/imports.js';
 import { loansRoutes } from './routes/loans.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { transactionsRoutes } from './routes/transactions.js';
+import { transfersRoutes } from './routes/transfers.js';
 
 async function buildServer() {
   const app = Fastify({
@@ -34,6 +35,7 @@ async function buildServer() {
   await app.register(importsRoutes, { prefix: '/api' });
   await app.register(loansRoutes, { prefix: '/api' });
   await app.register(recurringRoutes, { prefix: '/api' });
+  await app.register(transfersRoutes, { prefix: '/api' });
 
   return app;
 }

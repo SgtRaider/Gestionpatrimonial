@@ -14,6 +14,7 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { accounts, categorizationRules, transactions } from '../db/schema.js';
 import { parseFile } from '../imports/format.js';
+import { detectInternalTransfers } from '../services/transfer-detector.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 const MAX_PREVIEW_ROWS = 10;
@@ -254,11 +255,19 @@ export const importsRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    // Pair newly imported credits/debits with their counterpart on another
+    // account when the import included a transfer (BBVA → Wise etc.). Runs
+    // against the full untagged set so it also catches pairs that span an
+    // older import + this one.
+    const transferResult =
+      inserted.length > 0 ? await detectInternalTransfers(DEFAULT_USER_ID) : { paired: 0 };
+
     return {
       inserted: inserted.length,
       duplicates: values.length - inserted.length,
       skipped,
       autoCategorized,
+      transfersPaired: transferResult.paired,
       format: result.format,
     };
   });

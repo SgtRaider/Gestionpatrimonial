@@ -76,6 +76,8 @@ export const importCommitResponseSchema = z.object({
   skipped: z.number().int().nonnegative(),
   // Of the inserted rows, how many were auto-categorized by an active rule.
   autoCategorized: z.number().int().nonnegative().default(0),
+  // Internal-transfer pairs detected after the insert (debit ↔ credit).
+  transfersPaired: z.number().int().nonnegative().default(0),
   format: importFormatSchema.optional(),
 });
 export type ImportCommitResponse = z.infer<typeof importCommitResponseSchema>;
