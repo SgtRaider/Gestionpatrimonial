@@ -219,7 +219,9 @@ function parseCajaRuralPdf(text: string): ImportPreviewRow[] {
     const dm = line.match(CRE_DATES);
     if (!dm) continue;
     const fechaRaw = dm[1] ?? '';
-    const rest = (dm[2] ?? '').trim();
+    // CRE_DATES has 3 groups: [1] date, [2] office (4 digits), [3] rest of line.
+    // The rest contains concepto + F.Valor + importe + saldo.
+    const rest = (dm[3] ?? '').trim();
     if (!rest) continue;
     const tokens = rest.split(/\s+/);
     if (tokens.length < 3) continue;
