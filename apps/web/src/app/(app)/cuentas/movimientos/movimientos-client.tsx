@@ -10,7 +10,16 @@ import { formatDelta } from '@/lib/format';
 import type { Category, TransactionListItem, TransactionListResponse } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+type Toast = {
+  id: number;
+  message: string;
+  tone: 'success' | 'error';
+  action?: { label: string; onClick: () => void };
+};
+
+const TOAST_DURATION_MS = 8000;
 
 type PendingRule = {
   tx: TransactionListItem;
@@ -33,7 +42,20 @@ export function MovimientosClient() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pendingRule, setPendingRule] = useState<PendingRule | null>(null);
-  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  // Auto-dismiss toasts after a delay so they don't pile up.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, TOAST_DURATION_MS);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  function showToast(t: Omit<Toast, 'id'>) {
+    setToast({ ...t, id: Date.now() });
+  }
 
   const query: TransactionsQuery = useMemo(() => {
     const q: TransactionsQuery = {
@@ -104,7 +126,7 @@ export function MovimientosClient() {
           queryClient.setQueryData(key, data);
         }
       }
-      setToast({ message: 'No se pudo guardar la categoría', tone: 'error' });
+      showToast({ message: 'No se pudo guardar la categoría', tone: 'error' });
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
@@ -116,12 +138,12 @@ export function MovimientosClient() {
     onSuccess: (resp) => {
       const extra =
         resp.appliedToCount > 0 ? ` · aplicada a ${resp.appliedToCount} mov. pasados` : '';
-      setToast({ message: `Regla creada${extra}`, tone: 'success' });
+      showToast({ message: `Regla creada${extra}`, tone: 'success' });
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       setPendingRule(null);
     },
     onError: (err) => {
-      setToast({
+      showToast({
         message: `Error creando regla: ${err instanceof Error ? err.message : 'desconocido'}`,
         tone: 'error',
       });
@@ -138,12 +160,24 @@ export function MovimientosClient() {
           if (wasUncategorized && newCategoryId) {
             const category = categoryById.get(newCategoryId);
             if (category) {
-              setPendingRule({
-                tx,
-                category,
-                suggestedRegex: suggestPatternFromDescription(tx.descriptionRaw),
+              showToast({
+                message: 'Categoría aplicada',
+                tone: 'success',
+                action: {
+                  label: 'Crear regla',
+                  onClick: () =>
+                    setPendingRule({
+                      tx,
+                      category,
+                      suggestedRegex: suggestPatternFromDescription(tx.descriptionRaw),
+                    }),
+                },
               });
             }
+          } else if (newCategoryId === null) {
+            showToast({ message: 'Categoría retirada', tone: 'success' });
+          } else {
+            showToast({ message: 'Categoría actualizada', tone: 'success' });
           }
         },
       },
@@ -284,16 +318,28 @@ export function MovimientosClient() {
 
       {toast ? (
         <output
-          className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg text-sm shadow-lg text-white ${
+          key={toast.id}
+          className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm shadow-lg text-white ${
             toast.tone === 'success' ? 'bg-[var(--color-positive)]' : 'bg-[var(--color-negative)]'
           }`}
-          onAnimationEnd={() => setToast(null)}
         >
-          {toast.message}
+          <span>{toast.message}</span>
+          {toast.action ? (
+            <button
+              type="button"
+              onClick={() => {
+                toast.action?.onClick();
+                setToast(null);
+              }}
+              className="px-2 py-0.5 rounded bg-white/20 hover:bg-white/30 text-xs font-medium whitespace-nowrap"
+            >
+              {toast.action.label}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setToast(null)}
-            className="ml-3 opacity-80 hover:opacity-100"
+            className="opacity-70 hover:opacity-100"
             aria-label="Cerrar"
           >
             ✕
