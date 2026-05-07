@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { categorizationRulesRoutes } from './routes/categorization-rules.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { healthRoutes } from './routes/health.js';
+import { holdingsRoutes } from './routes/holdings.js';
 import { importsRoutes } from './routes/imports.js';
 import { loansRoutes } from './routes/loans.js';
 import { netWorthRoutes } from './routes/net-worth.js';
@@ -38,6 +39,7 @@ async function buildServer() {
   await app.register(recurringRoutes, { prefix: '/api' });
   await app.register(transfersRoutes, { prefix: '/api' });
   await app.register(netWorthRoutes, { prefix: '/api' });
+  await app.register(holdingsRoutes, { prefix: '/api' });
 
   return app;
 }
