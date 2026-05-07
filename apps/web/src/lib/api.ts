@@ -87,11 +87,12 @@ async function send<T>(
   body: unknown,
   parser: (raw: unknown) => T,
 ): Promise<T> {
-  const init: RequestInit = {
-    method,
-    headers: { 'content-type': 'application/json' },
-  };
-  if (body !== undefined) init.body = JSON.stringify(body);
+  // Only attach content-type when we actually send a body — Fastify rejects
+  // empty bodies declared as application/json with FST_ERR_CTP_EMPTY_JSON_BODY.
+  const init: RequestInit =
+    body === undefined
+      ? { method }
+      : { method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
   const res = await fetch(`${API_URL}${path}`, init);
   if (!res.ok) {
     const text = await res.text().catch(() => '');
