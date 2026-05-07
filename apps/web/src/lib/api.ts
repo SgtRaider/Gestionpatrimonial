@@ -6,8 +6,10 @@ import {
   type Category,
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
+  type CreateHoldingInput,
   type Dashboard,
   type DeleteRecurringRuleResponse,
+  type Holding,
   type ImportCommitResponse,
   type ImportMapping,
   type ImportPreviewResponse,
@@ -16,8 +18,11 @@ import {
   type MarkRecurringInput,
   type MarkRecurringResponse,
   type NetWorthBreakdown,
+  type NetWorthSnapshot,
   type PrepaymentSimulationInput,
   type PrepaymentSimulationResponse,
+  type RecordHoldingTxInput,
+  type RecordValuationInput,
   type RecurringRule,
   type RecurringRulesListResponse,
   type TransactionListResponse,
@@ -31,12 +36,14 @@ import {
   createCategorizationRuleResponseSchema,
   dashboardSchema,
   deleteRecurringRuleResponseSchema,
+  holdingSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
   loanDetailSchema,
   loanSummarySchema,
   markRecurringResponseSchema,
   netWorthBreakdownSchema,
+  netWorthSnapshotSchema,
   prepaymentSimulationResponseSchema,
   recurringRuleSchema,
   recurringRulesListResponseSchema,
@@ -113,6 +120,45 @@ export const api = {
 
   getNetWorth: (): Promise<NetWorthBreakdown> =>
     get('/api/net-worth', (raw) => netWorthBreakdownSchema.parse(raw)),
+
+  getNetWorthSnapshots: (): Promise<NetWorthSnapshot[]> =>
+    get('/api/net-worth/snapshots', (raw) => z.array(netWorthSnapshotSchema).parse(raw)),
+
+  createNetWorthSnapshot: (): Promise<NetWorthSnapshot> =>
+    send('POST', '/api/net-worth/snapshots', undefined, (raw) => netWorthSnapshotSchema.parse(raw)),
+
+  getHoldings: (): Promise<Holding[]> =>
+    get('/api/holdings', (raw) => z.array(holdingSchema).parse(raw)),
+
+  createHolding: (input: CreateHoldingInput): Promise<Holding> =>
+    send('POST', '/api/holdings', input, (raw) => holdingSchema.parse(raw)),
+
+  recordHoldingValuation: (
+    holdingId: string,
+    input: RecordValuationInput,
+  ): Promise<{ ok: boolean; totalValue: string }> =>
+    send('POST', `/api/holdings/${holdingId}/valuations`, input, (raw) =>
+      z.object({ ok: z.boolean(), totalValue: z.string() }).parse(raw),
+    ),
+
+  recordHoldingTransaction: (
+    holdingId: string,
+    input: RecordHoldingTxInput,
+  ): Promise<{ ok: boolean; newQuantity: string; newAvgCost: string }> =>
+    send('POST', `/api/holdings/${holdingId}/transactions`, input, (raw) =>
+      z
+        .object({
+          ok: z.boolean(),
+          newQuantity: z.string(),
+          newAvgCost: z.string(),
+        })
+        .parse(raw),
+    ),
+
+  deleteHolding: (id: string): Promise<{ ok: boolean }> =>
+    send('DELETE', `/api/holdings/${id}`, undefined, (raw) =>
+      z.object({ ok: z.boolean() }).parse(raw),
+    ),
 
   getTransactions: (q: TransactionsQuery): Promise<TransactionListResponse> => {
     const qs = buildQuery({

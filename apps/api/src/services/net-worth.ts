@@ -1,5 +1,6 @@
 import { Decimal } from 'decimal.js';
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { v7 as uuidv7 } from 'uuid';
 import { db } from '../db/index.js';
 import {
   accounts,
@@ -8,6 +9,7 @@ import {
   institutions,
   loanRateHistory,
   loans,
+  netWorthSnapshots,
   transactions,
 } from '../db/schema.js';
 import { buildSchedule } from './loan-helpers.js';
@@ -195,4 +197,70 @@ export async function computeNetWorth(userId: string): Promise<NetWorthBreakdown
       netWorth: netWorth.toFixed(2),
     },
   };
+}
+
+export type NetWorthSnapshot = {
+  snapshotAt: string;
+  netWorth: string;
+  assetsLiquid: string;
+  assetsInvested: string;
+  assetsRealEstate: string;
+  assetsOther: string;
+  liabilitiesTotal: string;
+};
+
+// Materialize today's net-worth into `net_worth_snapshots`. Upserts on
+// (user, snapshot_at) so a same-day re-trigger replaces the row instead of
+// failing the unique index. Returns the persisted snapshot.
+export async function materializeNetWorthSnapshot(userId: string): Promise<NetWorthSnapshot> {
+  const breakdown = await computeNetWorth(userId);
+  const snapshotAt = breakdown.asOf;
+
+  await db
+    .delete(netWorthSnapshots)
+    .where(and(eq(netWorthSnapshots.userId, userId), eq(netWorthSnapshots.snapshotAt, snapshotAt)));
+
+  await db.insert(netWorthSnapshots).values({
+    id: uuidv7(),
+    userId,
+    snapshotAt,
+    assetsLiquid: breakdown.totals.liquid,
+    assetsInvested: breakdown.totals.invested,
+    assetsRealEstate: breakdown.totals.realEstate,
+    assetsOther: breakdown.totals.other,
+    liabilitiesTotal: breakdown.totals.liabilities,
+    netWorth: breakdown.totals.netWorth,
+    breakdown: {
+      accounts: breakdown.accounts,
+      holdings: breakdown.holdings,
+      loans: breakdown.loans,
+    },
+  });
+
+  return {
+    snapshotAt,
+    netWorth: breakdown.totals.netWorth,
+    assetsLiquid: breakdown.totals.liquid,
+    assetsInvested: breakdown.totals.invested,
+    assetsRealEstate: breakdown.totals.realEstate,
+    assetsOther: breakdown.totals.other,
+    liabilitiesTotal: breakdown.totals.liabilities,
+  };
+}
+
+export async function listNetWorthSnapshots(userId: string): Promise<NetWorthSnapshot[]> {
+  const rows = await db
+    .select({
+      snapshotAt: netWorthSnapshots.snapshotAt,
+      netWorth: netWorthSnapshots.netWorth,
+      assetsLiquid: netWorthSnapshots.assetsLiquid,
+      assetsInvested: netWorthSnapshots.assetsInvested,
+      assetsRealEstate: netWorthSnapshots.assetsRealEstate,
+      assetsOther: netWorthSnapshots.assetsOther,
+      liabilitiesTotal: netWorthSnapshots.liabilitiesTotal,
+    })
+    .from(netWorthSnapshots)
+    .where(eq(netWorthSnapshots.userId, userId))
+    .orderBy(desc(netWorthSnapshots.snapshotAt));
+  return rows;
 }

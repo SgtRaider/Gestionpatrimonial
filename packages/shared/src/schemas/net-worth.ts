@@ -50,3 +50,14 @@ export const netWorthBreakdownSchema = z.object({
   }),
 });
 export type NetWorthBreakdown = z.infer<typeof netWorthBreakdownSchema>;
+
+export const netWorthSnapshotSchema = z.object({
+  snapshotAt: z.string().date(),
+  netWorth: decimalString,
+  assetsLiquid: decimalString,
+  assetsInvested: decimalString,
+  assetsRealEstate: decimalString,
+  assetsOther: decimalString,
+  liabilitiesTotal: decimalString,
+});
+export type NetWorthSnapshot = z.infer<typeof netWorthSnapshotSchema>;

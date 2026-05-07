@@ -5,8 +5,19 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatEur } from '@/lib/format';
-import type { NetWorthAccount } from '@gp/shared';
-import { useQuery } from '@tanstack/react-query';
+import type { NetWorthAccount, NetWorthSnapshot } from '@gp/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { AddHoldingDialog } from './add-holding-dialog';
 
 const ACCOUNT_TYPE_LABELS: Record<NetWorthAccount['type'], string> = {
   checking: 'Corriente',
@@ -20,14 +31,83 @@ const ACCOUNT_TYPE_LABELS: Record<NetWorthAccount['type'], string> = {
 };
 
 export function PatrimonioClient() {
+  const queryClient = useQueryClient();
+  const [showAddHolding, setShowAddHolding] = useState(false);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['net-worth'],
     queryFn: api.getNetWorth,
   });
+  const snapshotsQuery = useQuery({
+    queryKey: ['net-worth-snapshots'],
+    queryFn: api.getNetWorthSnapshots,
+  });
+  const accountsQuery = useQuery({
+    queryKey: ['accounts'],
+    queryFn: api.getAccounts,
+    staleTime: 5 * 60_000,
+  });
+
+  const snapshotMutation = useMutation({
+    mutationFn: api.createNetWorthSnapshot,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['net-worth-snapshots'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
+  const createHoldingMutation = useMutation({
+    mutationFn: async (input: {
+      accountId: string;
+      name: string;
+      ticker: string | null;
+      isin: string | null;
+      currency: string;
+      quantity: string;
+      avgCost: string;
+      nav?: string;
+    }) => {
+      const { nav, ...holdingInput } = input;
+      const holding = await api.createHolding(holdingInput);
+      if (nav) {
+        await api.recordHoldingValuation(holding.id, {
+          valuationAt: new Date().toISOString().slice(0, 10),
+          nav,
+        });
+      }
+      return holding;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['net-worth'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setShowAddHolding(false);
+    },
+  });
 
   return (
     <div className="max-w-7xl mx-auto p-4 lg:p-8 space-y-6">
-      <PageHeader title="Patrimonio" {...(data ? { subtitle: `Foto a ${data.asOf}` } : {})} />
+      <PageHeader
+        title="Patrimonio"
+        {...(data ? { subtitle: `Foto a ${data.asOf}` } : {})}
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => setShowAddHolding(true)}
+              className="text-sm px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+            >
+              + Añadir posición
+            </button>
+            <button
+              type="button"
+              onClick={() => snapshotMutation.mutate()}
+              disabled={snapshotMutation.isPending}
+              className="text-sm px-3 py-1.5 rounded bg-[var(--color-accent)] text-white disabled:opacity-50"
+            >
+              {snapshotMutation.isPending ? 'Guardando…' : '📸 Materializar foto'}
+            </button>
+          </>
+        }
+      />
 
       {isLoading ? (
         <div className="p-12 text-center text-[var(--color-muted)]">Cargando…</div>
@@ -38,6 +118,7 @@ export function PatrimonioClient() {
       ) : !data ? null : (
         <>
           <NetWorthHeadline totals={data.totals} />
+          <SnapshotsChart snapshots={snapshotsQuery.data ?? []} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <AccountsCard accounts={data.accounts} />
             <HoldingsCard holdings={data.holdings} />
@@ -45,7 +126,71 @@ export function PatrimonioClient() {
           </div>
         </>
       )}
+
+      {showAddHolding ? (
+        <AddHoldingDialog
+          accounts={accountsQuery.data ?? []}
+          isPending={createHoldingMutation.isPending}
+          onConfirm={(input) => createHoldingMutation.mutate(input)}
+          onDismiss={() => setShowAddHolding(false)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+function SnapshotsChart({ snapshots }: { snapshots: NetWorthSnapshot[] }) {
+  if (snapshots.length === 0) {
+    return (
+      <Card>
+        <CardHeader title="Evolución" subtitle="Sin fotos guardadas todavía" />
+        <p className="text-xs text-[var(--color-muted)] py-3">
+          Pulsa <strong>Materializar foto</strong> para guardar la situación actual. Cada foto
+          alimenta esta gráfica histórica.
+        </p>
+      </Card>
+    );
+  }
+  // Recharts wants ascending dates.
+  const data = [...snapshots]
+    .sort((a, b) => a.snapshotAt.localeCompare(b.snapshotAt))
+    .map((s) => ({
+      date: s.snapshotAt,
+      netWorth: Number(s.netWorth),
+    }));
+  return (
+    <Card>
+      <CardHeader title="Evolución" subtitle={`${snapshots.length} fotos`} />
+      <div className="h-64 -mx-2">
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="patNetFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#2563eb" stopOpacity={0.25} />
+                <stop offset="100%" stopColor="#2563eb" stopOpacity={0.02} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+            <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="var(--color-muted)" />
+            <YAxis
+              tickFormatter={(v) => formatEur(v, { compact: true })}
+              tick={{ fontSize: 11 }}
+              stroke="var(--color-muted)"
+            />
+            <Tooltip
+              formatter={(v: number | string) => [formatEur(v, { compact: true }), 'Neto']}
+            />
+            <Area
+              type="monotone"
+              dataKey="netWorth"
+              stroke="#2563eb"
+              strokeWidth={2}
+              fill="url(#patNetFill)"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+    </Card>
   );
 }
 
