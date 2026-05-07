@@ -1,14 +1,96 @@
-import { createCategorizationRuleSchema } from '@gp/shared';
+import { createCategorizationRuleSchema, updateCategorizationRuleSchema } from '@gp/shared';
 import { Decimal } from 'decimal.js';
-import { and, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { v7 as uuidv7 } from 'uuid';
+import { z } from 'zod';
 import { db } from '../db/index.js';
-import { categorizationRules, transactions } from '../db/schema.js';
+import { accounts, categories, categorizationRules, transactions } from '../db/schema.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
 export const categorizationRulesRoutes: FastifyPluginAsync = async (app) => {
+  // List rules with denormalized category/account labels and a "hits" count
+  // (transactions in this category whose description matches the pattern).
+  // Sorted by priority desc so high-pri rules surface first.
+  app.get('/categorization-rules', async () => {
+    const hitCountExpr = sql<number>`(
+      SELECT COUNT(*)::int FROM ${transactions}
+      WHERE ${transactions.userId} = ${categorizationRules.userId}
+        AND ${transactions.deletedAt} IS NULL
+        AND ${transactions.descriptionRaw} ~* ${categorizationRules.patternRegex}
+        AND ${transactions.categoryId} = ${categorizationRules.categoryId}
+    )`;
+
+    const rows = await db
+      .select({
+        id: categorizationRules.id,
+        patternRegex: categorizationRules.patternRegex,
+        categoryId: categorizationRules.categoryId,
+        accountId: categorizationRules.accountId,
+        amountMin: categorizationRules.amountMin,
+        amountMax: categorizationRules.amountMax,
+        priority: categorizationRules.priority,
+        active: categorizationRules.active,
+        categoryName: categories.name,
+        categoryColor: categories.color,
+        accountName: accounts.name,
+        hits: hitCountExpr,
+      })
+      .from(categorizationRules)
+      .leftJoin(categories, eq(categorizationRules.categoryId, categories.id))
+      .leftJoin(accounts, eq(categorizationRules.accountId, accounts.id))
+      .where(
+        and(eq(categorizationRules.userId, DEFAULT_USER_ID), isNull(categorizationRules.deletedAt)),
+      )
+      .orderBy(desc(categorizationRules.priority), asc(categorizationRules.patternRegex));
+
+    return rows.map((r) => ({
+      ...r,
+      categoryName: r.categoryName ?? '—',
+      hits: Number(r.hits ?? 0),
+    }));
+  });
+
+  app.patch('/categorization-rules/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const patch = updateCategorizationRuleSchema.parse(request.body);
+    const [updated] = await db
+      .update(categorizationRules)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(
+        and(
+          eq(categorizationRules.id, params.id),
+          eq(categorizationRules.userId, DEFAULT_USER_ID),
+          isNull(categorizationRules.deletedAt),
+        ),
+      )
+      .returning({ id: categorizationRules.id });
+    if (!updated) {
+      return reply.code(404).send({ error: 'Regla no encontrada' });
+    }
+    return { id: updated.id, ok: true };
+  });
+
+  app.delete('/categorization-rules/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const [deleted] = await db
+      .update(categorizationRules)
+      .set({ deletedAt: new Date(), active: false, updatedAt: new Date() })
+      .where(
+        and(
+          eq(categorizationRules.id, params.id),
+          eq(categorizationRules.userId, DEFAULT_USER_ID),
+          isNull(categorizationRules.deletedAt),
+        ),
+      )
+      .returning({ id: categorizationRules.id });
+    if (!deleted) {
+      return reply.code(404).send({ error: 'Regla no encontrada' });
+    }
+    return { id: deleted.id, ok: true };
+  });
+
   app.post('/categorization-rules', async (request, reply) => {
     const body = createCategorizationRuleSchema.parse(request.body);
 

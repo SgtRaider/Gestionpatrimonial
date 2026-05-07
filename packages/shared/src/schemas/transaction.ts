@@ -121,6 +121,26 @@ export type CreateCategorizationRuleResponse = z.infer<
   typeof createCategorizationRuleResponseSchema
 >;
 
+// Enriched rule for the management list: joins category metadata + hit count.
+export const categorizationRuleEnrichedSchema = categorizationRuleSchema.extend({
+  categoryName: z.string(),
+  categoryColor: z.string().nullable(),
+  accountName: z.string().nullable(),
+  hits: z.number().int().nonnegative(),
+});
+export type CategorizationRuleEnriched = z.infer<typeof categorizationRuleEnrichedSchema>;
+
+export const updateCategorizationRuleSchema = z.object({
+  patternRegex: z.string().min(1).max(500).optional(),
+  categoryId: z.string().uuid().optional(),
+  accountId: z.string().uuid().nullable().optional(),
+  amountMin: decimalString.nullable().optional(),
+  amountMax: decimalString.nullable().optional(),
+  priority: z.number().int().optional(),
+  active: z.boolean().optional(),
+});
+export type UpdateCategorizationRuleInput = z.infer<typeof updateCategorizationRuleSchema>;
+
 export const transactionListResponseSchema = z.object({
   items: z.array(transactionListItemSchema),
   total: z.number().int().nonnegative(),

@@ -4,6 +4,7 @@ import {
   type BulkCategorizeInput,
   type BulkCategorizeResponse,
   type CategorizationQueueResponse,
+  type CategorizationRuleEnriched,
   type Category,
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
@@ -38,6 +39,7 @@ import {
   type TransactionPatch,
   type UnlinkRecurringInput,
   type UnlinkRecurringResponse,
+  type UpdateCategorizationRuleInput,
   type UpdateGoalInput,
   type UpdateLoanInput,
   type UpdatePlannedEventInput,
@@ -47,6 +49,7 @@ import {
   accountWithInstitutionSchema,
   bulkCategorizeResponseSchema,
   categorizationQueueResponseSchema,
+  categorizationRuleEnrichedSchema,
   categorySchema,
   createCategorizationRuleResponseSchema,
   dashboardSchema,
@@ -317,6 +320,22 @@ export const api = {
   ): Promise<CreateCategorizationRuleResponse> =>
     send('POST', '/api/categorization-rules', input, (raw) =>
       createCategorizationRuleResponseSchema.parse(raw),
+    ),
+
+  listCategorizationRules: (): Promise<CategorizationRuleEnriched[]> =>
+    get('/api/categorization-rules', (raw) => z.array(categorizationRuleEnrichedSchema).parse(raw)),
+
+  updateCategorizationRule: (
+    id: string,
+    patch: UpdateCategorizationRuleInput,
+  ): Promise<{ id: string; ok: boolean }> =>
+    send('PATCH', `/api/categorization-rules/${id}`, patch, (raw) =>
+      z.object({ id: z.string().uuid(), ok: z.boolean() }).parse(raw),
+    ),
+
+  deleteCategorizationRule: (id: string): Promise<{ id: string; ok: boolean }> =>
+    send('DELETE', `/api/categorization-rules/${id}`, undefined, (raw) =>
+      z.object({ id: z.string().uuid(), ok: z.boolean() }).parse(raw),
     ),
 
   markRecurring: (input: MarkRecurringInput): Promise<MarkRecurringResponse> =>
