@@ -20,6 +20,7 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
   const [amount, setAmount] = useState('5000');
   const [date, setDate] = useState(todayYmd());
   const [mode, setMode] = useState<PrepaymentMode>('reduce_term');
+  const [feePct, setFeePct] = useState(() => loan.prepaymentFeePct ?? '0');
   const [result, setResult] = useState<PrepaymentSimulationResponse | null>(null);
 
   useEffect(() => {
@@ -52,8 +53,14 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
     return () => clearTimeout(handle);
   }, [amount, date, mode]);
 
-  const fee = result?.fee ?? '0.00';
-  const feeIsZero = !fee || Number(fee) === 0;
+  // Fee is computed client-side so the user can tweak the % per their bank's
+  // fine print. The backend value is only the loan's stored default.
+  const amountNumber = Number(amount) || 0;
+  const feePctNumber = Number(feePct) || 0;
+  const feeAmount = (amountNumber * feePctNumber) / 100;
+  const feeIsZero = feeAmount === 0;
+  const interestSavedNumber = result ? Number(result.interestSaved) : 0;
+  const netSavings = interestSavedNumber - feeAmount;
 
   return (
     <dialog
@@ -78,7 +85,7 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
           Estima el ahorro reduciendo plazo o cuota.
         </p>
 
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-3 gap-3 mb-4">
           <label className="block">
             <span className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
               Importe
@@ -103,6 +110,28 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
               onChange={(e) => setDate(e.target.value)}
               className="mt-1 w-full h-9 px-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
             />
+          </label>
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
+              Comisión
+            </span>
+            <div className="mt-1 flex items-center rounded border border-[var(--color-border)] bg-[var(--color-bg)] focus-within:ring-2 focus-within:ring-[var(--color-accent)]/40">
+              <input
+                type="number"
+                value={feePct}
+                onChange={(e) => setFeePct(e.target.value)}
+                step="0.05"
+                min="0"
+                max="100"
+                className="flex-1 h-9 px-2 text-sm bg-transparent focus:outline-none tabular-nums"
+              />
+              <span className="px-2 text-[var(--color-muted)] text-sm">%</span>
+            </div>
+            <span className="text-[10px] text-[var(--color-muted)] mt-0.5 block">
+              {loan.prepaymentFeePct
+                ? `Por defecto del contrato: ${loan.prepaymentFeePct}%`
+                : 'Comprueba en tu contrato'}
+            </span>
           </label>
         </div>
 
@@ -144,7 +173,12 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
         </fieldset>
 
         {result ? (
-          <ScenarioComparison result={result} mode={mode} />
+          <ScenarioComparison
+            result={result}
+            mode={mode}
+            feeAmount={feeAmount}
+            netSavings={netSavings}
+          />
         ) : simulation.isPending ? (
           <div className="text-sm text-[var(--color-muted)] py-6 text-center">Calculando…</div>
         ) : simulation.isError ? (
@@ -155,8 +189,8 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
 
         {result && !feeIsZero ? (
           <p className="text-xs text-[var(--color-warning)] mt-3">
-            ⚠ Comisión de amortización aproximada: <strong>{formatEur(fee)}</strong> (
-            {loan.prepaymentFeePct}% sobre {formatEur(amount || '0')})
+            ⚠ Comisión: <strong>{formatEur(feeAmount.toFixed(2))}</strong> ({feePct}% sobre{' '}
+            {formatEur(amount || '0')})
           </p>
         ) : null}
 
@@ -177,13 +211,18 @@ export function PrepaymentDialog({ loan, onClose }: Props) {
 function ScenarioComparison({
   result,
   mode,
+  feeAmount,
+  netSavings,
 }: {
   result: PrepaymentSimulationResponse;
   mode: PrepaymentMode;
+  feeAmount: number;
+  netSavings: number;
 }) {
   const monthsSaved = result.monthsSaved;
   const yearsSaved = monthsSaved >= 12 ? Math.floor(monthsSaved / 12) : 0;
   const monthsRemainder = monthsSaved % 12;
+  const showFee = feeAmount > 0;
 
   return (
     <div className="grid grid-cols-2 gap-3">
@@ -223,19 +262,38 @@ function ScenarioComparison({
             value={formatEur(result.withPrepayment.totalInterestRemaining)}
           />
         </div>
-        <div className="pt-2 border-t border-[var(--color-accent)]/20 text-sm">
-          <div className="text-xs text-[var(--color-muted)]">Ahorro intereses</div>
-          <div className="font-semibold tabular-nums text-[var(--color-positive)]">
-            {formatEur(result.interestSaved)}
-            {monthsSaved > 0 ? (
-              <span className="text-xs font-normal text-[var(--color-muted)] ml-2">
-                ·{' '}
-                {yearsSaved > 0
-                  ? `${yearsSaved} a${monthsRemainder > 0 ? ` ${monthsRemainder} m` : ''}`
-                  : `${monthsSaved} m`}{' '}
-                antes
+        <div className="pt-2 border-t border-[var(--color-accent)]/20 text-sm space-y-1">
+          <div className="flex justify-between items-baseline">
+            <span className="text-xs text-[var(--color-muted)]">Ahorro intereses</span>
+            <span className="tabular-nums font-medium">{formatEur(result.interestSaved)}</span>
+          </div>
+          {showFee ? (
+            <div className="flex justify-between items-baseline">
+              <span className="text-xs text-[var(--color-muted)]">Comisión</span>
+              <span className="tabular-nums font-medium text-[var(--color-negative)]">
+                −{formatEur(feeAmount.toFixed(2))}
               </span>
-            ) : null}
+            </div>
+          ) : null}
+          <div className="flex justify-between items-baseline pt-1 border-t border-[var(--color-accent)]/10">
+            <span className="text-xs text-[var(--color-muted)]">Ahorro neto</span>
+            <span
+              className={cn(
+                'tabular-nums font-semibold',
+                netSavings >= 0 ? 'text-[var(--color-positive)]' : 'text-[var(--color-negative)]',
+              )}
+            >
+              {formatEur(netSavings.toFixed(2))}
+              {monthsSaved > 0 ? (
+                <span className="text-xs font-normal text-[var(--color-muted)] ml-2">
+                  ·{' '}
+                  {yearsSaved > 0
+                    ? `${yearsSaved} a${monthsRemainder > 0 ? ` ${monthsRemainder} m` : ''}`
+                    : `${monthsSaved} m`}{' '}
+                  antes
+                </span>
+              ) : null}
+            </span>
           </div>
         </div>
       </div>
