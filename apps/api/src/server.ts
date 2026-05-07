@@ -5,11 +5,13 @@ import Fastify from 'fastify';
 import { config } from './config.js';
 import { categorizationRulesRoutes } from './routes/categorization-rules.js';
 import { dashboardRoutes } from './routes/dashboard.js';
+import { goalsRoutes } from './routes/goals.js';
 import { healthRoutes } from './routes/health.js';
 import { holdingsRoutes } from './routes/holdings.js';
 import { importsRoutes } from './routes/imports.js';
 import { loansRoutes } from './routes/loans.js';
 import { netWorthRoutes } from './routes/net-worth.js';
+import { plannedEventsRoutes } from './routes/planned-events.js';
 import { recurringRoutes } from './routes/recurring.js';
 import { transactionsRoutes } from './routes/transactions.js';
 import { transfersRoutes } from './routes/transfers.js';
@@ -40,6 +42,8 @@ async function buildServer() {
   await app.register(transfersRoutes, { prefix: '/api' });
   await app.register(netWorthRoutes, { prefix: '/api' });
   await app.register(holdingsRoutes, { prefix: '/api' });
+  await app.register(goalsRoutes, { prefix: '/api' });
+  await app.register(plannedEventsRoutes, { prefix: '/api' });
 
   return app;
 }

@@ -6,4 +6,5 @@ export * from './schemas/import.js';
 export * from './schemas/holdings.js';
 export * from './schemas/loan.js';
 export * from './schemas/net-worth.js';
+export * from './schemas/planning.js';
 export * from './schemas/recurring.js';

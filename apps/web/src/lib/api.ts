@@ -6,9 +6,12 @@ import {
   type Category,
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
+  type CreateGoalInput,
   type CreateHoldingInput,
+  type CreatePlannedEventInput,
   type Dashboard,
   type DeleteRecurringRuleResponse,
+  type GoalEnriched,
   type Holding,
   type ImportCommitResponse,
   type ImportMapping,
@@ -19,6 +22,7 @@ import {
   type MarkRecurringResponse,
   type NetWorthBreakdown,
   type NetWorthSnapshot,
+  type PlannedEvent,
   type PrepaymentSimulationInput,
   type PrepaymentSimulationResponse,
   type RecordHoldingTxInput,
@@ -29,6 +33,8 @@ import {
   type TransactionPatch,
   type UnlinkRecurringInput,
   type UnlinkRecurringResponse,
+  type UpdateGoalInput,
+  type UpdatePlannedEventInput,
   type UpdateRecurringRuleInput,
   accountWithInstitutionSchema,
   bulkCategorizeResponseSchema,
@@ -36,6 +42,7 @@ import {
   createCategorizationRuleResponseSchema,
   dashboardSchema,
   deleteRecurringRuleResponseSchema,
+  goalEnrichedSchema,
   holdingSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
@@ -44,6 +51,7 @@ import {
   markRecurringResponseSchema,
   netWorthBreakdownSchema,
   netWorthSnapshotSchema,
+  plannedEventSchema,
   prepaymentSimulationResponseSchema,
   recurringRuleSchema,
   recurringRulesListResponseSchema,
@@ -157,6 +165,34 @@ export const api = {
 
   deleteHolding: (id: string): Promise<{ ok: boolean }> =>
     send('DELETE', `/api/holdings/${id}`, undefined, (raw) =>
+      z.object({ ok: z.boolean() }).parse(raw),
+    ),
+
+  getGoals: (): Promise<GoalEnriched[]> =>
+    get('/api/goals', (raw) => z.array(goalEnrichedSchema).parse(raw)),
+
+  createGoal: (input: CreateGoalInput): Promise<GoalEnriched> =>
+    send('POST', '/api/goals', input, (raw) => goalEnrichedSchema.parse(raw)),
+
+  updateGoal: (id: string, patch: UpdateGoalInput): Promise<GoalEnriched> =>
+    send('PATCH', `/api/goals/${id}`, patch, (raw) => goalEnrichedSchema.parse(raw)),
+
+  deleteGoal: (id: string): Promise<{ ok: boolean }> =>
+    send('DELETE', `/api/goals/${id}`, undefined, (raw) =>
+      z.object({ ok: z.boolean() }).parse(raw),
+    ),
+
+  getPlannedEvents: (): Promise<PlannedEvent[]> =>
+    get('/api/planned-events', (raw) => z.array(plannedEventSchema).parse(raw)),
+
+  createPlannedEvent: (input: CreatePlannedEventInput): Promise<PlannedEvent> =>
+    send('POST', '/api/planned-events', input, (raw) => plannedEventSchema.parse(raw)),
+
+  updatePlannedEvent: (id: string, patch: UpdatePlannedEventInput): Promise<PlannedEvent> =>
+    send('PATCH', `/api/planned-events/${id}`, patch, (raw) => plannedEventSchema.parse(raw)),
+
+  deletePlannedEvent: (id: string): Promise<{ ok: boolean }> =>
+    send('DELETE', `/api/planned-events/${id}`, undefined, (raw) =>
       z.object({ ok: z.boolean() }).parse(raw),
     ),
 
