@@ -1,7 +1,12 @@
 'use client';
 
 import { formatEur } from '@/lib/format';
-import type { RecurringFrequency, RecurringKind, TransactionListItem } from '@gp/shared';
+import type {
+  RecurringAmountKind,
+  RecurringFrequency,
+  RecurringKind,
+  TransactionListItem,
+} from '@gp/shared';
 import { useEffect, useMemo, useState } from 'react';
 
 type Props = {
@@ -11,6 +16,7 @@ type Props = {
     name: string;
     kind: RecurringKind;
     frequency: RecurringFrequency;
+    amountKind: RecurringAmountKind;
     expectedAmount: string;
   }) => void;
   onDismiss: () => void;
@@ -38,17 +44,30 @@ function inferDefaults(transactions: TransactionListItem[]): {
   name: string;
   kind: RecurringKind;
   frequency: RecurringFrequency;
+  amountKind: RecurringAmountKind;
   meanAmount: string;
 } {
   const first = transactions[0];
   const name = first?.normalizedMerchant ?? first?.counterparty ?? first?.descriptionRaw ?? '';
-  const sum = transactions.reduce((acc, t) => acc + Number(t.amount), 0);
+  const amounts = transactions.map((t) => Number(t.amount));
+  const sum = amounts.reduce((acc, n) => acc + n, 0);
   const mean = transactions.length === 0 ? 0 : sum / transactions.length;
   const meanAmount = mean.toFixed(2);
 
   let kind: RecurringKind = 'subscription';
   if (mean > 0) kind = 'salary';
   else if (Math.abs(mean) > 200) kind = 'bill';
+
+  // Default to "variable" when amounts swing more than 5 % from the mean —
+  // typical for utilities (Iberdrola, Aguas, gas) and salaries with monthly
+  // bonuses. The user can override.
+  let amountKind: RecurringAmountKind = 'fixed';
+  if (transactions.length >= 2 && Math.abs(mean) > 0) {
+    const min = Math.min(...amounts.map(Math.abs));
+    const max = Math.max(...amounts.map(Math.abs));
+    const meanAbs = Math.abs(mean);
+    if (max - min > 0.5 && (max - min) / meanAbs > 0.05) amountKind = 'variable';
+  }
 
   let frequency: RecurringFrequency = 'monthly';
   if (transactions.length >= 2) {
@@ -74,7 +93,7 @@ function inferDefaults(transactions: TransactionListItem[]): {
     }
   }
 
-  return { name: name.slice(0, 200), kind, frequency, meanAmount };
+  return { name: name.slice(0, 200), kind, frequency, amountKind, meanAmount };
 }
 
 export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDismiss }: Props) {
@@ -82,6 +101,7 @@ export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDism
   const [name, setName] = useState(defaults.name);
   const [kind, setKind] = useState<RecurringKind>(defaults.kind);
   const [frequency, setFrequency] = useState<RecurringFrequency>(defaults.frequency);
+  const [amountKind, setAmountKind] = useState<RecurringAmountKind>(defaults.amountKind);
   const [amount, setAmount] = useState(defaults.meanAmount);
 
   // Re-seed when the selection changes (different merchants → fresh defaults).
@@ -89,6 +109,7 @@ export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDism
     setName(defaults.name);
     setKind(defaults.kind);
     setFrequency(defaults.frequency);
+    setAmountKind(defaults.amountKind);
     setAmount(defaults.meanAmount);
   }, [defaults]);
 
@@ -186,22 +207,45 @@ export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDism
             </label>
           </div>
 
-          <label className="block">
-            <span className="text-xs uppercase tracking-wide text-[var(--color-muted)]">
-              Importe esperado
-            </span>
+          <fieldset className="border border-[var(--color-border)] rounded-lg p-3">
+            <legend className="px-1 text-[11px] uppercase tracking-wide text-[var(--color-muted)]">
+              Importe
+            </legend>
+            <div className="flex items-center gap-4 text-sm mb-2">
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="amount-kind"
+                  value="fixed"
+                  checked={amountKind === 'fixed'}
+                  onChange={() => setAmountKind('fixed')}
+                />
+                Fijo
+              </label>
+              <label className="flex items-center gap-1.5 cursor-pointer">
+                <input
+                  type="radio"
+                  name="amount-kind"
+                  value="variable"
+                  checked={amountKind === 'variable'}
+                  onChange={() => setAmountKind('variable')}
+                />
+                Variable
+              </label>
+            </div>
             <input
               type="text"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="-13.99"
-              className="mt-1 w-full h-9 px-3 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
+              className="w-full h-9 px-3 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)] tabular-nums focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)]/40"
             />
             <span className="text-[11px] text-[var(--color-muted)] mt-1 block">
-              Por defecto, la media de los movimientos seleccionados (
-              {formatEur(defaults.meanAmount)}).
+              {amountKind === 'fixed'
+                ? `Importe fijo. Por defecto, la media (${formatEur(defaults.meanAmount)}).`
+                : 'Importe orientativo (luz, gas, nómina, …). Se usa para KPIs y proyecciones; los cargos reales pueden variar.'}
             </span>
-          </label>
+          </fieldset>
         </div>
 
         <div className="flex justify-end gap-2 pt-2 border-t border-[var(--color-border)]">
@@ -216,7 +260,13 @@ export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDism
           <button
             type="button"
             onClick={() =>
-              onConfirm({ name: trimmedName, kind, frequency, expectedAmount: amount })
+              onConfirm({
+                name: trimmedName,
+                kind,
+                frequency,
+                amountKind,
+                expectedAmount: amount,
+              })
             }
             disabled={!canSubmit}
             className="px-3 py-1.5 text-sm rounded bg-[var(--color-accent)] text-white disabled:opacity-50"

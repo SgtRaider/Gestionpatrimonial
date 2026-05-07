@@ -484,12 +484,13 @@ export function MovimientosClient() {
         <MarkRecurringDialog
           transactions={recurringSelection}
           isPending={markRecurringMutation.isPending}
-          onConfirm={({ name, kind, frequency, expectedAmount }) =>
+          onConfirm={({ name, kind, frequency, amountKind, expectedAmount }) =>
             markRecurringMutation.mutate({
               transactionIds: recurringSelection.map((t) => t.id),
               name,
               kind,
               frequency,
+              amountKind,
               expectedAmount,
             })
           }

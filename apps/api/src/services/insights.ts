@@ -280,6 +280,38 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     groups.set(key, g);
   }
 
+  // Pre-fetch rules so the analysis loop knows whether a merchant already has
+  // a `variable` manual rule — those skip the amount-stability check so e.g.
+  // utilities (Iberdrola, Aguas, …) get linked even when bills swing month to
+  // month.
+  const allRules = await db
+    .select({
+      id: recurringRules.id,
+      name: recurringRules.name,
+      amountKind: recurringRules.amountKind,
+      detectedAutomatically: recurringRules.detectedAutomatically,
+      deletedAt: recurringRules.deletedAt,
+    })
+    .from(recurringRules)
+    .where(eq(recurringRules.userId, userId));
+  const activeRulesByName = new Map<
+    string,
+    { id: string; detectedAutomatically: boolean; amountKind: 'fixed' | 'variable' }
+  >();
+  const tombstoned = new Set<string>();
+  for (const r of allRules) {
+    const nameKey = r.name.trim().toLowerCase();
+    if (r.deletedAt) {
+      tombstoned.add(nameKey);
+    } else {
+      activeRulesByName.set(nameKey, {
+        id: r.id,
+        detectedAutomatically: r.detectedAutomatically,
+        amountKind: r.amountKind,
+      });
+    }
+  }
+
   const detected: DetectedSubscription[] = [];
   const now = Date.now();
   for (const [key, g] of groups) {
@@ -310,10 +342,16 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     const nums = sorted.map((t) => t.amount.toNumber());
     const mean = nums.reduce((acc, n) => acc + n, 0) / nums.length;
     if (mean === 0) continue;
-    const min = Math.min(...nums);
-    const max = Math.max(...nums);
-    const spread = max - min;
-    if (spread > 0.5 || spread / mean > 0.02) continue;
+
+    const isVariableMerchant = activeRulesByName.get(key)?.amountKind === 'variable';
+    if (!isVariableMerchant) {
+      // Fixed-amount stability check for new merchants and existing fixed
+      // rules. True subscriptions charge the same cents every period.
+      const min = Math.min(...nums);
+      const max = Math.max(...nums);
+      const spread = max - min;
+      if (spread > 0.5 || spread / mean > 0.02) continue;
+    }
 
     const meanD = new Decimal(mean.toFixed(2));
     if (meanD.lessThan(3)) continue;
@@ -338,31 +376,6 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
   }
 
   if (detected.length === 0) return [];
-
-  // Fetch existing rules (active + tombstoned) to dedup. Names are matched
-  // case-insensitively against the merchant display.
-  const allRules = await db
-    .select({
-      id: recurringRules.id,
-      name: recurringRules.name,
-      detectedAutomatically: recurringRules.detectedAutomatically,
-      deletedAt: recurringRules.deletedAt,
-    })
-    .from(recurringRules)
-    .where(eq(recurringRules.userId, userId));
-  const activeRulesByName = new Map<string, { id: string; detectedAutomatically: boolean }>();
-  const tombstoned = new Set<string>();
-  for (const r of allRules) {
-    const nameKey = r.name.trim().toLowerCase();
-    if (r.deletedAt) {
-      tombstoned.add(nameKey);
-    } else {
-      activeRulesByName.set(nameKey, {
-        id: r.id,
-        detectedAutomatically: r.detectedAutomatically,
-      });
-    }
-  }
 
   // Sync rules and link transactions, then emit insights.
   const candidates: InsightCandidate[] = [];

@@ -8,6 +8,13 @@
       "when": 1778122402290,
       "tag": "0000_foamy_loki",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778159145813,
+      "tag": "0001_worthless_eddie_brock",
+      "breakpoints": true
     }
   ]
 }

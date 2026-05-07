@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { recurringFrequencySchema, recurringKindSchema, recurringStatusSchema } from '../enums.js';
+import {
+  recurringAmountKindSchema,
+  recurringFrequencySchema,
+  recurringKindSchema,
+  recurringStatusSchema,
+} from '../enums.js';
 import { decimalString } from './transaction.js';
 
 export const recurringRuleSchema = z.object({
@@ -8,6 +13,7 @@ export const recurringRuleSchema = z.object({
   kind: recurringKindSchema,
   frequency: recurringFrequencySchema,
   expectedAmount: decimalString,
+  amountKind: recurringAmountKindSchema,
   currency: z.string().length(3),
   status: recurringStatusSchema,
   detectedAutomatically: z.boolean(),
@@ -23,7 +29,10 @@ export const markRecurringInputSchema = z.object({
   name: z.string().min(1).max(200),
   kind: recurringKindSchema,
   frequency: recurringFrequencySchema,
+  amountKind: recurringAmountKindSchema.default('fixed'),
   // If omitted, the API uses the mean amount of the selected transactions.
+  // For `variable` rules this acts as a typical/average amount used for KPIs
+  // and projections rather than an exact-match expectation.
   expectedAmount: decimalString.optional(),
   notes: z.string().max(2000).optional(),
 });

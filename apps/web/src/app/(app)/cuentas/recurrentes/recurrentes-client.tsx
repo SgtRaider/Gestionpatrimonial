@@ -188,7 +188,7 @@ function RuleSection({
                 className="border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30"
               >
                 <td className="px-3 py-2">
-                  <div className="font-medium flex items-center gap-1.5">
+                  <div className="font-medium flex items-center gap-1.5 flex-wrap">
                     <span>{r.name}</span>
                     {r.detectedAutomatically ? (
                       <span
@@ -198,19 +198,31 @@ function RuleSection({
                         auto
                       </span>
                     ) : null}
+                    {r.amountKind === 'variable' ? (
+                      <span
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-muted)]/15 text-[var(--color-muted)]"
+                        title="Importe variable — los cargos pueden cambiar mes a mes"
+                      >
+                        variable
+                      </span>
+                    ) : null}
                   </div>
                 </td>
                 <td className="px-3 py-2 text-[var(--color-muted)]">{KIND_LABELS[r.kind]}</td>
                 <td className="px-3 py-2 text-[var(--color-muted)]">
                   {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
                 </td>
-                <td className="px-3 py-2 text-right tabular-nums">{formatEur(r.expectedAmount)}</td>
+                <td className="px-3 py-2 text-right tabular-nums">
+                  {r.amountKind === 'variable' ? '≈ ' : ''}
+                  {formatEur(r.expectedAmount)}
+                </td>
                 <td
                   className={cn(
                     'px-3 py-2 text-right tabular-nums font-medium',
                     r.kind === 'salary' ? 'text-[var(--color-positive)]' : 'text-[var(--color-fg)]',
                   )}
                 >
+                  {r.amountKind === 'variable' ? '≈ ' : ''}
                   {formatEur(r.annualCost, { compact: true })}
                 </td>
                 <td className="px-3 py-2 text-center text-[var(--color-muted)]">{r.linkedCount}</td>

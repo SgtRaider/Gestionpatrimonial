@@ -132,6 +132,8 @@ export const recurringFrequencyEnum = pgEnum('recurring_frequency', [
 
 export const recurringStatusEnum = pgEnum('recurring_status', ['active', 'paused', 'cancelled']);
 
+export const recurringAmountKindEnum = pgEnum('recurring_amount_kind', ['fixed', 'variable']);
+
 export const plannedEventKindEnum = pgEnum('planned_event_kind', [
   'expense',
   'income',
@@ -366,6 +368,7 @@ export const recurringRules = pgTable(
     categoryId: uuid('category_id').references(() => categories.id),
     accountId: uuid('account_id').references(() => accounts.id),
     status: recurringStatusEnum('status').default('active').notNull(),
+    amountKind: recurringAmountKindEnum('amount_kind').default('fixed').notNull(),
     detectedAutomatically: boolean('detected_automatically').default(false).notNull(),
     confidence: pct('confidence'),
     notes: text('notes'),

@@ -69,6 +69,9 @@ export type RecurringKind = z.infer<typeof recurringKindSchema>;
 export const recurringStatusSchema = z.enum(['active', 'paused', 'cancelled']);
 export type RecurringStatus = z.infer<typeof recurringStatusSchema>;
 
+export const recurringAmountKindSchema = z.enum(['fixed', 'variable']);
+export type RecurringAmountKind = z.infer<typeof recurringAmountKindSchema>;
+
 export const certaintySchema = z.enum(['low', 'medium', 'high', 'certain']);
 export type Certainty = z.infer<typeof certaintySchema>;
 

@@ -1,0 +1,2 @@
+CREATE TYPE "public"."recurring_amount_kind" AS ENUM('fixed', 'variable');--> statement-breakpoint
+ALTER TABLE "recurring_rules" ADD COLUMN "amount_kind" "recurring_amount_kind" DEFAULT 'fixed' NOT NULL;
