@@ -14,8 +14,8 @@ import { NetWorthChart } from '@/components/dashboard/net-worth-chart';
 import { UpcomingEvents } from '@/components/dashboard/upcoming-events';
 import { api } from '@/lib/api';
 import type { DashboardPeriod } from '@gp/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
 
 const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: 'month', label: 'Mes' },
@@ -24,12 +24,57 @@ const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
   { value: 'year', label: 'Año' },
 ];
 
+type Toast = { id: number; message: string; tone: 'success' | 'error' };
+
 export function DashboardClient() {
   const queryClient = useQueryClient();
   const [period, setPeriod] = useState<DashboardPeriod>('month');
+  const [toast, setToast] = useState<Toast | null>(null);
   const { data, isLoading, isError, error, isFetching } = useQuery({
     queryKey: ['dashboard', period],
     queryFn: () => api.getDashboard(period),
+  });
+
+  // Auto-dismiss toasts.
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  // Sync runs side-effects that the user expects when they pull-to-refresh:
+  // re-detects internal transfers (catches pairs imported separately),
+  // materialises today's net-worth foto, and invalidates every query so
+  // every panel refetches fresh data on next render.
+  const syncMutation = useMutation({
+    mutationFn: async () => {
+      const transfers = await api.detectTransfers();
+      const snapshot = await api.createNetWorthSnapshot();
+      return { transfers, snapshot };
+    },
+    onSuccess: (resp) => {
+      queryClient.invalidateQueries();
+      const parts = [];
+      if (resp.transfers.paired > 0)
+        parts.push(
+          `${resp.transfers.paired} par${resp.transfers.paired === 1 ? '' : 'es'} de transferencias`,
+        );
+      parts.push(`foto al ${resp.snapshot.snapshotAt}`);
+      setToast({
+        id: Date.now(),
+        message: `✓ Sincronizado · ${parts.join(' · ')}`,
+        tone: 'success',
+      });
+    },
+    onError: (err) => {
+      setToast({
+        id: Date.now(),
+        message: `Error al sincronizar: ${err instanceof Error ? err.message : 'desconocido'}`,
+        tone: 'error',
+      });
+    },
   });
 
   if (isLoading) {
@@ -73,14 +118,34 @@ export function DashboardClient() {
           </select>
           <button
             type="button"
-            onClick={() => queryClient.invalidateQueries({ queryKey: ['dashboard'] })}
-            disabled={isFetching}
+            onClick={() => syncMutation.mutate()}
+            disabled={syncMutation.isPending || isFetching}
+            title="Detectar transferencias, guardar foto de patrimonio y refrescar todos los datos"
             className="px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)] disabled:opacity-50"
           >
-            {isFetching ? '↻ …' : '↻ Sync'}
+            {syncMutation.isPending ? '↻ Sincronizando…' : '↻ Sync'}
           </button>
         </div>
       </header>
+
+      {toast ? (
+        <output
+          key={toast.id}
+          className={`fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm shadow-lg text-white ${
+            toast.tone === 'success' ? 'bg-[var(--color-positive)]' : 'bg-[var(--color-negative)]'
+          }`}
+        >
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="opacity-70 hover:opacity-100"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </output>
+      ) : null}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <NetWorthKpi

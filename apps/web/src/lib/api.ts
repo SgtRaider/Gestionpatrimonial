@@ -142,6 +142,11 @@ export const api = {
   createNetWorthSnapshot: (): Promise<NetWorthSnapshot> =>
     send('POST', '/api/net-worth/snapshots', undefined, (raw) => netWorthSnapshotSchema.parse(raw)),
 
+  detectTransfers: (): Promise<{ paired: number }> =>
+    send('POST', '/api/transfers/detect', undefined, (raw) =>
+      z.object({ paired: z.number().int().nonnegative() }).parse(raw),
+    ),
+
   getHoldings: (): Promise<Holding[]> =>
     get('/api/holdings', (raw) => z.array(holdingSchema).parse(raw)),
 
