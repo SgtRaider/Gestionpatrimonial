@@ -197,10 +197,13 @@ export function parseCsvText(
 // Caja Rural de Extremadura PDF parser
 // ────────────────────────────────────────────────────────────────────────────
 
-// Pattern: `DD-MM-YYYY OOOO concepto DD-MM importe[-] saldo`
-//   - OOOO = office code (4 digits)
-//   - importe ends with '-' if negative
-const CRE_ROW = /^(\d{2}-\d{2}-\d{4})\s+(\d{4})\s+(.+?)\s+(\d{2}-\d{2})\s+([\d.,]+-?)\s+([\d.,]+)$/;
+// Caja Rural row layout: `DD-MM-YYYY OOOO concepto DD-MM importe[-]? saldo`.
+// Token-based parser: leading date + 4-digit office, then concepto, then a
+// DD-MM F.Valor token, then importe and saldo at the end. Trailing '-' may
+// arrive attached to the importe token or as a separate token.
+const CRE_DATES = /^(\d{2}-\d{2}-\d{4})\s+(\d{4})\s+(.+)$/;
+const CRE_FVALOR = /^\d{2}-\d{2}$/;
+const NUM_OR_DASH = /^[\d.,-]+$/;
 
 function parseCajaRuralPdf(text: string): ImportPreviewRow[] {
   const rows: ImportPreviewRow[] = [];
@@ -209,12 +212,43 @@ function parseCajaRuralPdf(text: string): ImportPreviewRow[] {
     if (!line) continue;
     if (/^Saldo Anterior/i.test(line)) continue;
     if (/^REFERENCIA:/i.test(line)) continue;
-    const m = line.match(CRE_ROW);
-    if (!m) continue;
-    const [, fechaRaw, , conceptoRaw, , importeRaw] = m;
-    const date = parseDmyDash(fechaRaw ?? '');
-    const amount = parseSpanishAmount(importeRaw ?? '');
-    const description = (conceptoRaw ?? '').trim();
+
+    const dm = line.match(CRE_DATES);
+    if (!dm) continue;
+    const fechaRaw = dm[1] ?? '';
+    const rest = (dm[2] ?? '').trim();
+    if (!rest) continue;
+    const tokens = rest.split(/\s+/);
+    if (tokens.length < 3) continue;
+
+    const saldoToken = tokens[tokens.length - 1] ?? '';
+    let amountToken = tokens[tokens.length - 2] ?? '';
+    let leading = tokens.slice(0, -2);
+
+    // Stranded trailing minus: "1,40 -" → join into "1,40-"
+    if (amountToken !== '-' && saldoToken === '-') {
+      // Saldo is just '-' so the previous "saldo" must actually be a partial amount;
+      // unlikely shape, skip.
+      continue;
+    }
+    if (amountToken === '-' && leading.length > 0) {
+      const prev = leading[leading.length - 1] ?? '';
+      amountToken = `${prev}-`;
+      leading = leading.slice(0, -1);
+    }
+
+    if (!NUM_OR_DASH.test(amountToken) || !NUM_OR_DASH.test(saldoToken)) continue;
+
+    // The last element of `leading` should be the F.Valor (DD-MM). Strip it.
+    let descTokens = leading;
+    const lastLeading = descTokens[descTokens.length - 1] ?? '';
+    if (CRE_FVALOR.test(lastLeading)) {
+      descTokens = descTokens.slice(0, -1);
+    }
+
+    const date = parseDmyDash(fechaRaw);
+    const amount = parseSpanishAmount(amountToken);
+    const description = descTokens.join(' ').trim();
     rows.push({
       date,
       amount,
@@ -232,21 +266,51 @@ function parseCajaRuralPdf(text: string): ImportPreviewRow[] {
 // MyInvestor PDF parser
 // ────────────────────────────────────────────────────────────────────────────
 
-// Pattern: `DD/MM/YYYY DD/MM/YYYY <op + concept> <signed amount> <saldo> [€]`
-const MI_ROW =
-  /^(\d{2}\/\d{2}\/\d{4})\s+\d{2}\/\d{2}\/\d{4}\s+(.+?)\s+(-?[\d.,]+)\s+([\d.,]+)\s*€?\s*$/;
+// MyInvestor PDF row layout: `DD/MM/YYYY DD/MM/YYYY <op + concept> <amount> <saldo> €`.
+// pdfjs sometimes emits the leading '-' as its own text item, so we tokenize and
+// find the last 2 numeric tokens rather than rely on a tight regex.
+const MI_DATES = /^(\d{2}\/\d{2}\/\d{4})\s+\d{2}\/\d{2}\/\d{4}\s+(.+)$/;
+const NUMERIC_TOKEN = /^-?[\d]+(?:[.,][\d]+)*$/;
 
 function parseMyInvestorPdf(text: string): ImportPreviewRow[] {
   const rows: ImportPreviewRow[] = [];
   for (const rawLine of text.split('\n')) {
     const line = rawLine.replace(/\s+/g, ' ').trim();
     if (!line) continue;
-    const m = line.match(MI_ROW);
-    if (!m) continue;
-    const [, fechaRaw, descriptionRaw, importeRaw] = m;
-    const date = parseDmySlash(fechaRaw ?? '');
-    const amount = parseSpanishAmount(importeRaw ?? '');
-    const description = (descriptionRaw ?? '').trim();
+    const dm = line.match(MI_DATES);
+    if (!dm) continue;
+    const fechaRaw = dm[1] ?? '';
+    const restRaw = dm[2] ?? '';
+    // Strip the trailing currency symbol so it doesn't end up as a token.
+    const rest = restRaw.replace(/\s*€\s*$/, '').trim();
+    if (!rest) continue;
+    const tokens = rest.split(/\s+/);
+    if (tokens.length < 2) continue;
+
+    const saldoToken = tokens[tokens.length - 1] ?? '';
+    let amountToken = tokens[tokens.length - 2] ?? '';
+    let descTokens = tokens.slice(0, -2);
+
+    // Re-attach a stranded leading minus sign (pdfjs sometimes emits "-" as its
+    // own text item separate from the digits).
+    if (
+      !amountToken.startsWith('-') &&
+      descTokens.length > 0 &&
+      descTokens[descTokens.length - 1] === '-'
+    ) {
+      amountToken = `-${amountToken}`;
+      descTokens = descTokens.slice(0, -1);
+    }
+
+    if (!NUMERIC_TOKEN.test(amountToken) || !NUMERIC_TOKEN.test(saldoToken)) {
+      // Not a transaction row (probably a header or section title that happens
+      // to have a date).
+      continue;
+    }
+
+    const date = parseDmySlash(fechaRaw);
+    const amount = parseSpanishAmount(amountToken);
+    const description = descTokens.join(' ').trim();
     rows.push({
       date,
       amount,

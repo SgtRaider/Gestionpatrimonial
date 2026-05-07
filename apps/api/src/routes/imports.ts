@@ -13,7 +13,7 @@ import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { accounts, transactions } from '../db/schema.js';
-import { type FormatId, parseFile } from '../imports/format.js';
+import { parseFile } from '../imports/format.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 const MAX_PREVIEW_ROWS = 10;
@@ -126,17 +126,9 @@ export const importsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const stats = computeStats(result.rows);
-    const response: ImportPreviewResponse & { format: FormatId; formatLabel: string } = {
+    const response: ImportPreviewResponse = {
       headers: result.csv?.headers ?? [],
-      detectedMapping:
-        result.csv?.detectedMapping ??
-        ({
-          date: '',
-          amount: '',
-          description: '',
-          decimalSeparator: 'auto',
-          dateFormat: 'auto',
-        } as ImportMapping),
+      ...(result.csv ? { detectedMapping: result.csv.detectedMapping } : {}),
       sampleRows: result.rows.slice(0, MAX_PREVIEW_ROWS),
       stats,
       format: result.format,

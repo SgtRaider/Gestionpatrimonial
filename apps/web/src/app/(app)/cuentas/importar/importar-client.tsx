@@ -48,7 +48,7 @@ export function ImportarClient() {
     mutationFn: api.importTransactionsPreview,
     onSuccess: (resp) => {
       setPreview(resp);
-      setMapping(resp.detectedMapping);
+      setMapping(resp.detectedMapping ?? null);
       setStep('review');
       setError(null);
     },
@@ -170,7 +170,7 @@ export function ImportarClient() {
         </Card>
       ) : null}
 
-      {step === 'review' && preview && mapping ? (
+      {step === 'review' && preview ? (
         <>
           <Card className="space-y-4">
             <CardHeader
@@ -204,7 +204,7 @@ export function ImportarClient() {
               />
             </div>
 
-            {preview.headers.length > 0 ? (
+            {preview.headers.length > 0 && mapping ? (
               <div>
                 <h4 className="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-2">
                   Mapeo de columnas

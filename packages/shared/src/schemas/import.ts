@@ -57,7 +57,9 @@ export type ImportFormat = z.infer<typeof importFormatSchema>;
 
 export const importPreviewResponseSchema = z.object({
   headers: z.array(z.string()),
-  detectedMapping: importMappingSchema,
+  // Only present when the file is CSV-shaped (has columns to map). PDFs
+  // return undefined here; the UI hides the mapping editor in that case.
+  detectedMapping: importMappingSchema.optional(),
   sampleRows: z.array(importPreviewRowSchema),
   stats: importPreviewStatsSchema,
   format: importFormatSchema,
