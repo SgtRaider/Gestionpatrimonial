@@ -14,6 +14,7 @@ import { loansRoutes } from './routes/loans.js';
 import { netWorthRoutes } from './routes/net-worth.js';
 import { plannedEventsRoutes } from './routes/planned-events.js';
 import { recurringRoutes } from './routes/recurring.js';
+import { settingsRoutes } from './routes/settings.js';
 import { transactionsRoutes } from './routes/transactions.js';
 import { transfersRoutes } from './routes/transfers.js';
 
@@ -46,6 +47,7 @@ async function buildServer() {
   await app.register(holdingsRoutes, { prefix: '/api' });
   await app.register(goalsRoutes, { prefix: '/api' });
   await app.register(plannedEventsRoutes, { prefix: '/api' });
+  await app.register(settingsRoutes, { prefix: '/api' });
 
   return app;
 }

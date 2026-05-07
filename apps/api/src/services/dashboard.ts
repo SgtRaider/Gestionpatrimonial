@@ -12,8 +12,8 @@ import {
 } from '../db/schema.js';
 import { refreshInsights } from './insights.js';
 import { computeNetWorth } from './net-worth.js';
+import { getUserSettings } from './user-settings.js';
 
-const LARGE_EXPENSE_THRESHOLD = '200.00';
 const UPCOMING_DAYS = 30;
 const SERIES_MONTHS = 12;
 
@@ -415,6 +415,9 @@ export async function buildDashboard(
   // SUM queries) and keeps the feed in sync with the latest data.
   await refreshInsights(userId);
 
+  const settings = await getUserSettings(userId);
+  const largeExpenseThreshold = settings.largeExpenseThreshold;
+
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
   const nextMonthStart = addMonths(thisMonthStart, 1);
@@ -479,7 +482,7 @@ export async function buildDashboard(
   // KPI: next large expense
   const nextLargeExpense =
     upcomingEvents.find((e) =>
-      new Decimal(e.amount).abs().greaterThanOrEqualTo(LARGE_EXPENSE_THRESHOLD),
+      new Decimal(e.amount).abs().greaterThanOrEqualTo(largeExpenseThreshold),
     ) ?? null;
 
   const distribution = await computeDistribution(userId);

@@ -9,3 +9,4 @@ export * from './schemas/loan.js';
 export * from './schemas/net-worth.js';
 export * from './schemas/planning.js';
 export * from './schemas/recurring.js';
+export * from './schemas/settings.js';

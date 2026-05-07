@@ -41,6 +41,8 @@ import {
   type UpdateLoanInput,
   type UpdatePlannedEventInput,
   type UpdateRecurringRuleInput,
+  type UpdateUserSettingsInput,
+  type UserSettings,
   accountWithInstitutionSchema,
   bulkCategorizeResponseSchema,
   categorizationQueueResponseSchema,
@@ -64,6 +66,7 @@ import {
   recurringRulesListResponseSchema,
   transactionListResponseSchema,
   unlinkRecurringResponseSchema,
+  userSettingsSchema,
 } from '@gp/shared';
 import { z } from 'zod';
 
@@ -147,6 +150,12 @@ export const api = {
     send('POST', '/api/transfers/detect', undefined, (raw) =>
       z.object({ paired: z.number().int().nonnegative() }).parse(raw),
     ),
+
+  getSettings: (): Promise<UserSettings> =>
+    get('/api/settings', (raw) => userSettingsSchema.parse(raw)),
+
+  updateSettings: (input: UpdateUserSettingsInput): Promise<UserSettings> =>
+    send('PATCH', '/api/settings', input, (raw) => userSettingsSchema.parse(raw)),
 
   getHoldings: (): Promise<Holding[]> =>
     get('/api/holdings', (raw) => z.array(holdingSchema).parse(raw)),
