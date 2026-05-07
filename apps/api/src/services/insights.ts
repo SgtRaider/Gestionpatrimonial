@@ -1,5 +1,5 @@
 import { Decimal } from 'decimal.js';
-import { and, eq, gte, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from 'drizzle-orm';
 import { v7 as uuidv7 } from 'uuid';
 import { db } from '../db/index.js';
 import {
@@ -7,6 +7,7 @@ import {
   insights as insightsTable,
   loanRateHistory,
   loans,
+  recurringRules,
   transactions,
 } from '../db/schema.js';
 import { type AmortizationRow, buildSchedule } from './loan-helpers.js';
@@ -201,12 +202,29 @@ async function detectLowSavingsRate(userId: string): Promise<InsightCandidate[]>
 // recurring but already covered by the mortgage detector + their own UI).
 const LOAN_DESCRIPTION_RE = /\b(hipoteca|prestamo|préstamo|loan|rcbo|mortgage|cuota)\b/i;
 
+type DetectedSubscription = {
+  display: string;
+  key: string;
+  cadence: 'monthly' | 'weekly' | 'yearly';
+  frequency: 'monthly' | 'weekly' | 'yearly';
+  avgDelta: number;
+  unitAmount: Decimal;
+  occurrences: number;
+  txIds: string[];
+  unlinkedTxIds: string[];
+  inferredAccountId: string | null;
+  inferredCategoryId: string | null;
+  inferredCurrency: string;
+  lastBooked: Date;
+};
+
 async function detectRecurringSubscriptions(userId: string): Promise<InsightCandidate[]> {
   const sixMonthsAgo = new Date();
   sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
   const rows = await db
     .select({
+      id: transactions.id,
       merchantRaw: sql<
         string | null
       >`COALESCE(NULLIF(${transactions.normalizedMerchant}, ''), ${transactions.descriptionRaw})`,
@@ -214,6 +232,9 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
       amount: transactions.amount,
       description: transactions.descriptionRaw,
       recurringRuleId: transactions.recurringRuleId,
+      accountId: transactions.accountId,
+      categoryId: transactions.categoryId,
+      currency: transactions.currency,
     })
     .from(transactions)
     .where(
@@ -227,16 +248,18 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
       ),
     );
 
-  // Merchants whose transactions are already linked to a recurring rule are
-  // considered "declared" by the user — skip the auto-detector for them so we
-  // don't surface a duplicate "is this a subscription?" prompt.
-  const declaredMerchants = new Set<string>();
-  for (const r of rows) {
-    if (!r.recurringRuleId || !r.merchantRaw) continue;
-    declaredMerchants.add(r.merchantRaw.trim().toLowerCase());
-  }
-
-  type Group = { display: string; dates: Date[]; amounts: Decimal[] };
+  type Group = {
+    display: string;
+    txs: {
+      id: string;
+      bookedAt: Date;
+      amount: Decimal;
+      recurringRuleId: string | null;
+      accountId: string;
+      categoryId: string | null;
+      currency: string;
+    }[];
+  };
   const groups = new Map<string, Group>();
   for (const r of rows) {
     if (!r.merchantRaw) continue;
@@ -244,25 +267,31 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     if (!display) continue;
     if (LOAN_DESCRIPTION_RE.test(r.description) || LOAN_DESCRIPTION_RE.test(display)) continue;
     const key = display.toLowerCase();
-    if (declaredMerchants.has(key)) continue;
-    const g = groups.get(key) ?? { display, dates: [], amounts: [] };
-    g.dates.push(new Date(r.bookedAt));
-    g.amounts.push(new Decimal(r.amount).abs());
+    const g = groups.get(key) ?? { display, txs: [] };
+    g.txs.push({
+      id: r.id,
+      bookedAt: new Date(r.bookedAt),
+      amount: new Decimal(r.amount).abs(),
+      recurringRuleId: r.recurringRuleId,
+      accountId: r.accountId,
+      categoryId: r.categoryId,
+      currency: r.currency,
+    });
     groups.set(key, g);
   }
 
-  const candidates: InsightCandidate[] = [];
+  const detected: DetectedSubscription[] = [];
   const now = Date.now();
   for (const [key, g] of groups) {
-    if (g.dates.length < 2) continue;
-    g.dates.sort((a, b) => a.getTime() - b.getTime());
+    if (g.txs.length < 2) continue;
+    const sorted = [...g.txs].sort((a, b) => a.bookedAt.getTime() - b.bookedAt.getTime());
 
     const deltas: number[] = [];
-    for (let i = 1; i < g.dates.length; i++) {
-      const a = g.dates[i - 1];
-      const b = g.dates[i];
+    for (let i = 1; i < sorted.length; i++) {
+      const a = sorted[i - 1];
+      const b = sorted[i];
       if (!a || !b) continue;
-      deltas.push((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+      deltas.push((b.bookedAt.getTime() - a.bookedAt.getTime()) / (1000 * 60 * 60 * 24));
     }
     if (deltas.length === 0) continue;
     const avgDelta = deltas.reduce((acc, d) => acc + d, 0) / deltas.length;
@@ -273,18 +302,12 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     else if (avgDelta >= 350 && avgDelta <= 380) cadence = 'yearly';
     if (!cadence) continue;
 
-    // Skip subscriptions that look discontinued: most recent charge older
-    // than 1.75x the cadence. (Prevents flagging cancelled trials.)
-    const lastDate = g.dates[g.dates.length - 1];
-    if (!lastDate) continue;
-    const daysSinceLast = (now - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+    const lastTx = sorted[sorted.length - 1];
+    if (!lastTx) continue;
+    const daysSinceLast = (now - lastTx.bookedAt.getTime()) / (1000 * 60 * 60 * 24);
     if (daysSinceLast > avgDelta * 1.75) continue;
 
-    // Require near-identical amounts (within 2 % drift AND ≤ 0.50 € absolute
-    // spread). True subscriptions charge the same cents every period; close-
-    // but-not-identical amounts are usually habitual purchases (gas stations,
-    // groceries, utilities) that we don't want to flag as cancellable.
-    const nums = g.amounts.map((a) => a.toNumber());
+    const nums = sorted.map((t) => t.amount.toNumber());
     const mean = nums.reduce((acc, n) => acc + n, 0) / nums.length;
     if (mean === 0) continue;
     const min = Math.min(...nums);
@@ -295,29 +318,137 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     const meanD = new Decimal(mean.toFixed(2));
     if (meanD.lessThan(3)) continue;
 
-    const annualizer = cadence === 'monthly' ? 12 : cadence === 'weekly' ? 52 : 1;
-    const annual = meanD.times(annualizer);
+    const accountIdSet = new Set(sorted.map((t) => t.accountId));
+    const categoryIdSet = new Set(sorted.map((t) => t.categoryId).filter((c): c is string => !!c));
+    detected.push({
+      display: g.display,
+      key,
+      cadence,
+      frequency: cadence,
+      avgDelta,
+      unitAmount: meanD,
+      occurrences: sorted.length,
+      txIds: sorted.map((t) => t.id),
+      unlinkedTxIds: sorted.filter((t) => !t.recurringRuleId).map((t) => t.id),
+      inferredAccountId: accountIdSet.size === 1 ? (sorted[0]?.accountId ?? null) : null,
+      inferredCategoryId: categoryIdSet.size === 1 ? (Array.from(categoryIdSet)[0] ?? null) : null,
+      inferredCurrency: sorted[0]?.currency ?? 'EUR',
+      lastBooked: lastTx.bookedAt,
+    });
+  }
 
+  if (detected.length === 0) return [];
+
+  // Fetch existing rules (active + tombstoned) to dedup. Names are matched
+  // case-insensitively against the merchant display.
+  const allRules = await db
+    .select({
+      id: recurringRules.id,
+      name: recurringRules.name,
+      detectedAutomatically: recurringRules.detectedAutomatically,
+      deletedAt: recurringRules.deletedAt,
+    })
+    .from(recurringRules)
+    .where(eq(recurringRules.userId, userId));
+  const activeRulesByName = new Map<string, { id: string; detectedAutomatically: boolean }>();
+  const tombstoned = new Set<string>();
+  for (const r of allRules) {
+    const nameKey = r.name.trim().toLowerCase();
+    if (r.deletedAt) {
+      tombstoned.add(nameKey);
+    } else {
+      activeRulesByName.set(nameKey, {
+        id: r.id,
+        detectedAutomatically: r.detectedAutomatically,
+      });
+    }
+  }
+
+  // Sync rules and link transactions, then emit insights.
+  const candidates: InsightCandidate[] = [];
+  for (const sub of detected) {
+    const existing = activeRulesByName.get(sub.key);
+    let ruleId: string;
+    let detectedAutomaticallyFlag: boolean;
+    if (existing) {
+      ruleId = existing.id;
+      detectedAutomaticallyFlag = existing.detectedAutomatically;
+    } else if (tombstoned.has(sub.key)) {
+      // The user explicitly removed this rule before AND no active rule with
+      // the same name exists — honor their choice and skip recreation.
+      continue;
+    } else {
+      const newRuleId = uuidv7();
+      const nextExpectedAt = nextDateFor(sub.lastBooked, sub.frequency);
+      await db.insert(recurringRules).values({
+        id: newRuleId,
+        userId,
+        name: sub.display,
+        kind: 'subscription',
+        frequency: sub.frequency,
+        expectedAmount: sub.unitAmount.negated().toFixed(2),
+        currency: sub.inferredCurrency,
+        accountId: sub.inferredAccountId,
+        categoryId: sub.inferredCategoryId,
+        status: 'active',
+        detectedAutomatically: true,
+        nextExpectedAt,
+      });
+      ruleId = newRuleId;
+      detectedAutomaticallyFlag = true;
+    }
+
+    if (sub.unlinkedTxIds.length > 0) {
+      await db
+        .update(transactions)
+        .set({ recurringRuleId: ruleId, updatedAt: new Date() })
+        .where(and(inArray(transactions.id, sub.unlinkedTxIds), eq(transactions.userId, userId)));
+    }
+
+    // Manually-confirmed subscriptions don't need a "is this a sub?" insight
+    // — the user already declared them recurrent. Auto-detected ones still
+    // surface so the user can confirm/dismiss.
+    if (!detectedAutomaticallyFlag) continue;
+
+    const annualizer = sub.cadence === 'monthly' ? 12 : sub.cadence === 'weekly' ? 52 : 1;
+    const annual = sub.unitAmount.times(annualizer);
     const cadenceLabel =
-      cadence === 'monthly' ? 'mensual' : cadence === 'weekly' ? 'semanal' : 'anual';
+      sub.cadence === 'monthly' ? 'mensual' : sub.cadence === 'weekly' ? 'semanal' : 'anual';
 
     candidates.push({
       kind: 'unused_subscription',
-      signature: `recurring_subscription:${key}`,
+      signature: `recurring_subscription:${sub.key}`,
       severity: 'info',
-      title: `Suscripción ${cadenceLabel}: ${g.display} — ${eur(annual)}/año`,
-      description: `${g.dates.length} cargos detectados (cada ~${Math.round(avgDelta)} días, ${eur(meanD)} cada uno). ¿Sigues usándola?`,
+      title: `Suscripción ${cadenceLabel}: ${sub.display} — ${eur(annual)}/año`,
+      description: `${sub.occurrences} cargos detectados (cada ~${Math.round(sub.avgDelta)} días, ${eur(sub.unitAmount)} cada uno). Confirma si la usas o quítala.`,
       estimatedSavings: annual.toFixed(2),
       actionable: true,
       payload: {
-        merchant: g.display,
-        cadence,
-        unitAmount: meanD.toFixed(2),
-        occurrences: g.dates.length,
+        merchant: sub.display,
+        cadence: sub.cadence,
+        unitAmount: sub.unitAmount.toFixed(2),
+        occurrences: sub.occurrences,
+        ruleId,
       },
     });
   }
   return candidates;
+}
+
+function nextDateFor(lastBooked: Date, frequency: 'monthly' | 'weekly' | 'yearly'): string {
+  const d = new Date(lastBooked);
+  switch (frequency) {
+    case 'weekly':
+      d.setUTCDate(d.getUTCDate() + 7);
+      break;
+    case 'monthly':
+      d.setUTCMonth(d.getUTCMonth() + 1);
+      break;
+    case 'yearly':
+      d.setUTCFullYear(d.getUTCFullYear() + 1);
+      break;
+  }
+  return d.toISOString().slice(0, 10);
 }
 
 async function detectHighFees(userId: string): Promise<InsightCandidate[]> {
