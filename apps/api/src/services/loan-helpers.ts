@@ -43,13 +43,24 @@ type LoanLikeTransaction = {
   descriptionRaw: string;
 };
 
+type ManualOverride = {
+  period: number;
+  transactionId: string;
+  bookedAt: Date;
+  amount: string;
+  descriptionRaw: string;
+};
+
 // Match each schedule row to the closest loan-shaped debit, by date proximity
-// (±10 days) and amount tolerance (±5 %). Returns enriched rows + the orphans
-// that fit the loan's amount range but couldn't be pinned to a specific row
-// (off-by-too-many days, lender ref drift, etc.).
+// (±10 days) and amount tolerance (±5 %). Manual overrides (rows in
+// `loan_payments` linking a tx to a period) win over the regex matcher and
+// are flagged `manual: true` so the UI can offer an unlink action.
+// Returns enriched rows + the orphans that fit the loan's amount range but
+// couldn't be pinned to a specific row.
 export function matchLoanPayments(
   schedule: AmortizationRow[],
   candidates: LoanLikeTransaction[],
+  overrides: ManualOverride[] = [],
 ): { rows: LoanScheduleRow[]; orphans: LoanPaymentMatch[] } {
   // Bound candidate amounts to this loan's range so we don't surface
   // transactions for a different mortgage / personal loan as orphans.
@@ -65,9 +76,31 @@ export function matchLoanPayments(
     if (lowerBound > 0 && (abs < lowerBound || abs > upperBound)) return false;
     return true;
   });
+
+  const overridesByPeriod = new Map<number, ManualOverride>();
   const usedTxIds = new Set<string>();
+  for (const o of overrides) {
+    overridesByPeriod.set(o.period, o);
+    usedTxIds.add(o.transactionId); // manual takes precedence over auto
+  }
 
   const rows: LoanScheduleRow[] = schedule.map((row) => {
+    // Manual override wins.
+    const manual = overridesByPeriod.get(row.period);
+    if (manual) {
+      return {
+        ...row,
+        matchedPayment: {
+          transactionId: manual.transactionId,
+          bookedAt: manual.bookedAt.toISOString().slice(0, 10),
+          actualPayment: new Decimal(manual.amount).abs().toFixed(2),
+          descriptionRaw: manual.descriptionRaw,
+          manual: true,
+        },
+        rateReview: null,
+      };
+    }
+
     const dueAtMs = new Date(row.dueAt).getTime();
     const expected = new Decimal(row.payment);
     let best: { tx: LoanLikeTransaction; diffDays: number } | null = null;
@@ -93,6 +126,7 @@ export function matchLoanPayments(
         bookedAt: best.tx.bookedAt.toISOString().slice(0, 10),
         actualPayment: new Decimal(best.tx.amount).abs().toFixed(2),
         descriptionRaw: best.tx.descriptionRaw,
+        manual: false,
       },
       rateReview: null,
     };
@@ -105,6 +139,7 @@ export function matchLoanPayments(
       bookedAt: t.bookedAt.toISOString().slice(0, 10),
       actualPayment: new Decimal(t.amount).abs().toFixed(2),
       descriptionRaw: t.descriptionRaw,
+      manual: false,
     }));
 
   return { rows, orphans };

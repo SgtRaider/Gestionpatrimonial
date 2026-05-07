@@ -158,6 +158,20 @@ export const api = {
         .parse(raw),
     ),
 
+  manualMatchPayment: (
+    loanId: string,
+    period: number,
+    transactionId: string,
+  ): Promise<{ ok: boolean }> =>
+    send('POST', `/api/loans/${loanId}/schedule/${period}/match`, { transactionId }, (raw) =>
+      z.object({ ok: z.boolean() }).parse(raw),
+    ),
+
+  unlinkManualMatch: (loanId: string, period: number): Promise<{ ok: boolean; removed: number }> =>
+    send('DELETE', `/api/loans/${loanId}/schedule/${period}/match`, undefined, (raw) =>
+      z.object({ ok: z.boolean(), removed: z.number().int().nonnegative() }).parse(raw),
+    ),
+
   patchTransaction: (id: string, patch: TransactionPatch) =>
     send('PATCH', `/api/transactions/${id}`, patch, (raw) =>
       patchTransactionResponseSchema.parse(raw),

@@ -39,8 +39,16 @@ export const loanPaymentMatchSchema = z.object({
   bookedAt: z.string().date(),
   actualPayment: decimalString,
   descriptionRaw: z.string(),
+  // `true` when the match is a stored override (user picked it manually);
+  // `false` when the regex+amount+date matcher inferred it on the fly.
+  manual: z.boolean().default(false),
 });
 export type LoanPaymentMatch = z.infer<typeof loanPaymentMatchSchema>;
+
+export const manualMatchPaymentInputSchema = z.object({
+  transactionId: z.string().uuid(),
+});
+export type ManualMatchPaymentInput = z.infer<typeof manualMatchPaymentInputSchema>;
 
 // `recorded`: the rate at this review came from `loan_rate_history` (past
 // real review, or a future one the user already entered).

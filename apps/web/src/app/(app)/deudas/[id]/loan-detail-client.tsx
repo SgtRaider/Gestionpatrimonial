@@ -2,6 +2,7 @@
 
 import { AddRateReviewDialog } from '@/components/deudas/add-rate-review-dialog';
 import { InvestVsAmortizeDialog } from '@/components/deudas/invest-vs-amortize-dialog';
+import { ManualMatchDialog } from '@/components/deudas/manual-match-dialog';
 import { PrepaymentDialog } from '@/components/deudas/prepayment-dialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -61,7 +62,24 @@ function Body({ loan }: { loan: LoanDetail }) {
   const [showPrepayment, setShowPrepayment] = useState(false);
   const [showInvestCompare, setShowInvestCompare] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<LoanScheduleRow | null>(null);
+  const [matchTarget, setMatchTarget] = useState<LoanScheduleRow | null>(null);
   const queryClient = useQueryClient();
+
+  const matchMutation = useMutation({
+    mutationFn: ({ period, transactionId }: { period: number; transactionId: string }) =>
+      api.manualMatchPayment(loan.id, period, transactionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loan', loan.id] });
+      setMatchTarget(null);
+    },
+  });
+
+  const unlinkMatchMutation = useMutation({
+    mutationFn: (period: number) => api.unlinkManualMatch(loan.id, period),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loan', loan.id] });
+    },
+  });
 
   const reviewMutation = useMutation({
     mutationFn: (input: {
@@ -359,7 +377,32 @@ function Body({ loan }: { loan: LoanDetail }) {
                         missed && 'text-amber-600 dark:text-amber-400 font-medium',
                       )}
                     >
-                      {statusLabel}
+                      {missed ? (
+                        <button
+                          type="button"
+                          onClick={() => setMatchTarget(row)}
+                          className="hover:underline"
+                          title="Vincular un cargo a esta cuota"
+                        >
+                          {statusLabel}
+                        </button>
+                      ) : matched?.manual ? (
+                        <span className="inline-flex items-center gap-1">
+                          {statusLabel}
+                          <button
+                            type="button"
+                            onClick={() => unlinkMatchMutation.mutate(row.period)}
+                            disabled={unlinkMatchMutation.isPending}
+                            aria-label="Quitar vínculo manual"
+                            title="Quitar vínculo manual (volverá al matcher automático)"
+                            className="text-[var(--color-muted)] hover:text-[var(--color-negative)] disabled:opacity-50"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        statusLabel
+                      )}
                     </td>
                   </tr>
                 );
@@ -406,6 +449,17 @@ function Body({ loan }: { loan: LoanDetail }) {
           isPending={reviewMutation.isPending}
           onConfirm={(input) => reviewMutation.mutate(input)}
           onDismiss={() => setReviewTarget(null)}
+        />
+      ) : null}
+      {matchTarget ? (
+        <ManualMatchDialog
+          row={matchTarget}
+          candidates={loan.orphanPayments}
+          isPending={matchMutation.isPending}
+          onConfirm={(transactionId) =>
+            matchMutation.mutate({ period: matchTarget.period, transactionId })
+          }
+          onDismiss={() => setMatchTarget(null)}
         />
       ) : null}
     </div>

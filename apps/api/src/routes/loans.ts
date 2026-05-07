@@ -3,6 +3,7 @@ import {
   type LoanSummary,
   type PrepaymentSimulationResponse,
   addLoanRateHistoryInputSchema,
+  manualMatchPaymentInputSchema,
   prepaymentSimulationInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
@@ -11,7 +12,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { loanRateHistory, loans, transactions } from '../db/schema.js';
+import { loanPayments, loanRateHistory, loans, transactions } from '../db/schema.js';
 import {
   type AmortizationRow,
   locateCurrentPeriod,
@@ -138,7 +139,40 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
         ),
       );
 
-    const matched = matchLoanPayments(schedule, txs);
+    // Load manual payment overrides (loan_payments rows where the user
+    // pinned a transaction to a specific period). They take precedence over
+    // the regex matcher in matchLoanPayments.
+    const overrideRows = await db
+      .select({
+        period: loanPayments.period,
+        transactionId: loanPayments.transactionId,
+        bookedAt: transactions.bookedAt,
+        amount: transactions.amount,
+        descriptionRaw: transactions.descriptionRaw,
+      })
+      .from(loanPayments)
+      .innerJoin(transactions, eq(transactions.id, loanPayments.transactionId))
+      .where(
+        and(
+          eq(loanPayments.loanId, params.id),
+          isNull(loanPayments.deletedAt),
+          isNull(transactions.deletedAt),
+        ),
+      );
+    const overrides = overrideRows
+      .filter(
+        (r): r is typeof r & { period: number; transactionId: string } =>
+          r.period != null && r.transactionId != null,
+      )
+      .map((r) => ({
+        period: r.period,
+        transactionId: r.transactionId,
+        bookedAt: r.bookedAt,
+        amount: r.amount,
+        descriptionRaw: r.descriptionRaw,
+      }));
+
+    const matched = matchLoanPayments(schedule, txs, overrides);
     const reviewMarkers = buildRateReviewMarkers(data.loan, data.rateRows, schedule);
     const enrichedRows = matched.rows.map((row) => ({
       ...row,
@@ -161,6 +195,80 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
       orphanPayments: matched.orphans,
     };
     return detail;
+  });
+
+  // Manually pin a transaction to a specific schedule period. Overrides any
+  // auto-match the regex would have made. Idempotent on the (loan, period)
+  // pair: re-linking replaces the previous override.
+  app.post('/loans/:id/schedule/:period/match', async (request, reply) => {
+    const params = z
+      .object({ id: z.string().uuid(), period: z.coerce.number().int().positive() })
+      .parse(request.params);
+    const body = manualMatchPaymentInputSchema.parse(request.body);
+
+    const data = await loadLoanWithRates(params.id);
+    if (!data) return reply.code(404).send({ error: 'Préstamo no encontrado' });
+
+    const [tx] = await db
+      .select({
+        id: transactions.id,
+        bookedAt: transactions.bookedAt,
+        amount: transactions.amount,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.id, body.transactionId),
+          eq(transactions.userId, DEFAULT_USER_ID),
+          isNull(transactions.deletedAt),
+        ),
+      );
+    if (!tx) return reply.code(404).send({ error: 'Transacción no encontrada' });
+
+    // Replace any prior override for this period (soft-delete first).
+    await db
+      .update(loanPayments)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(loanPayments.loanId, params.id),
+          eq(loanPayments.period, params.period),
+          isNull(loanPayments.deletedAt),
+        ),
+      );
+
+    await db.insert(loanPayments).values({
+      id: uuidv7(),
+      loanId: params.id,
+      transactionId: body.transactionId,
+      occurredAt: tx.bookedAt.toISOString().slice(0, 10),
+      period: params.period,
+      principalPaid: '0',
+      interestPaid: '0',
+      feesPaid: '0',
+    });
+
+    return { ok: true };
+  });
+
+  // Remove a manual override (the auto-matcher takes over again on the next
+  // load). Safe no-op if no override exists.
+  app.delete('/loans/:id/schedule/:period/match', async (request) => {
+    const params = z
+      .object({ id: z.string().uuid(), period: z.coerce.number().int().positive() })
+      .parse(request.params);
+    const updated = await db
+      .update(loanPayments)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(loanPayments.loanId, params.id),
+          eq(loanPayments.period, params.period),
+          isNull(loanPayments.deletedAt),
+        ),
+      )
+      .returning({ id: loanPayments.id });
+    return { ok: true, removed: updated.length };
   });
 
   // Record a rate review (variable / mixed loans get one each anniversary).
