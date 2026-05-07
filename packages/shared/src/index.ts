@@ -4,4 +4,5 @@ export * from './schemas/account.js';
 export * from './schemas/dashboard.js';
 export * from './schemas/import.js';
 export * from './schemas/loan.js';
+export * from './schemas/net-worth.js';
 export * from './schemas/recurring.js';

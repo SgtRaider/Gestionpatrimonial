@@ -15,6 +15,7 @@ import {
   type LoanSummary,
   type MarkRecurringInput,
   type MarkRecurringResponse,
+  type NetWorthBreakdown,
   type PrepaymentSimulationInput,
   type PrepaymentSimulationResponse,
   type RecurringRule,
@@ -35,6 +36,7 @@ import {
   loanDetailSchema,
   loanSummarySchema,
   markRecurringResponseSchema,
+  netWorthBreakdownSchema,
   prepaymentSimulationResponseSchema,
   recurringRuleSchema,
   recurringRulesListResponseSchema,
@@ -108,6 +110,9 @@ export type TransactionsQuery = {
 export const api = {
   getDashboard: (): Promise<Dashboard> =>
     get('/api/dashboard', (raw) => dashboardSchema.parse(raw)),
+
+  getNetWorth: (): Promise<NetWorthBreakdown> =>
+    get('/api/net-worth', (raw) => netWorthBreakdownSchema.parse(raw)),
 
   getTransactions: (q: TransactionsQuery): Promise<TransactionListResponse> => {
     const qs = buildQuery({
