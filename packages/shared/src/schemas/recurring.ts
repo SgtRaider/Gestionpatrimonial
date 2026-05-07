@@ -45,3 +45,28 @@ export const unlinkRecurringResponseSchema = z.object({
   rulesDeleted: z.number().int().nonnegative(),
 });
 export type UnlinkRecurringResponse = z.infer<typeof unlinkRecurringResponseSchema>;
+
+export const recurringRuleEnrichedSchema = recurringRuleSchema.extend({
+  linkedCount: z.number().int().nonnegative(),
+  lastChargedAt: z.string().date().nullable(),
+  annualMultiplier: z.number().positive(),
+  annualCost: decimalString,
+});
+export type RecurringRuleEnriched = z.infer<typeof recurringRuleEnrichedSchema>;
+
+export const recurringRulesListResponseSchema = z.object({
+  items: z.array(recurringRuleEnrichedSchema),
+  summary: z.object({
+    activeCount: z.number().int().nonnegative(),
+    monthlyOutflow: decimalString,
+    monthlyInflow: decimalString,
+    annualOutflow: decimalString,
+    annualInflow: decimalString,
+  }),
+});
+export type RecurringRulesListResponse = z.infer<typeof recurringRulesListResponseSchema>;
+
+export const deleteRecurringRuleResponseSchema = z.object({
+  unlinkedCount: z.number().int().nonnegative(),
+});
+export type DeleteRecurringRuleResponse = z.infer<typeof deleteRecurringRuleResponseSchema>;

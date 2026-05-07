@@ -6,6 +6,7 @@ import {
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
   type Dashboard,
+  type DeleteRecurringRuleResponse,
   type ImportCommitResponse,
   type ImportMapping,
   type ImportPreviewResponse,
@@ -15,6 +16,7 @@ import {
   type MarkRecurringResponse,
   type PrepaymentSimulationInput,
   type PrepaymentSimulationResponse,
+  type RecurringRulesListResponse,
   type TransactionListResponse,
   type TransactionPatch,
   type UnlinkRecurringInput,
@@ -24,12 +26,14 @@ import {
   categorySchema,
   createCategorizationRuleResponseSchema,
   dashboardSchema,
+  deleteRecurringRuleResponseSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
   loanDetailSchema,
   loanSummarySchema,
   markRecurringResponseSchema,
   prepaymentSimulationResponseSchema,
+  recurringRulesListResponseSchema,
   transactionListResponseSchema,
   unlinkRecurringResponseSchema,
 } from '@gp/shared';
@@ -159,6 +163,14 @@ export const api = {
   unlinkRecurring: (input: UnlinkRecurringInput): Promise<UnlinkRecurringResponse> =>
     send('POST', '/api/recurring-rules/unlink', input, (raw) =>
       unlinkRecurringResponseSchema.parse(raw),
+    ),
+
+  getRecurringRules: (): Promise<RecurringRulesListResponse> =>
+    get('/api/recurring-rules', (raw) => recurringRulesListResponseSchema.parse(raw)),
+
+  deleteRecurringRule: (id: string): Promise<DeleteRecurringRuleResponse> =>
+    send('DELETE', `/api/recurring-rules/${id}`, undefined, (raw) =>
+      deleteRecurringRuleResponseSchema.parse(raw),
     ),
 
   importTransactionsPreview: async (args: {

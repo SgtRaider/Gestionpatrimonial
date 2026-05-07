@@ -1,17 +1,29 @@
 import {
+  type DeleteRecurringRuleResponse,
   type MarkRecurringResponse,
   type RecurringRule,
+  type RecurringRuleEnriched,
+  type RecurringRulesListResponse,
   type UnlinkRecurringResponse,
   markRecurringInputSchema,
   unlinkRecurringInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { recurringRules, transactions } from '../db/schema.js';
+
+const ANNUAL_MULTIPLIER: Record<string, number> = {
+  weekly: 52,
+  monthly: 12,
+  quarterly: 4,
+  biannual: 2,
+  yearly: 1,
+  custom: 1,
+};
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
@@ -185,15 +197,110 @@ export const recurringRoutes: FastifyPluginAsync = async (app) => {
     return response;
   });
 
-  // List rules (used by future "Pagos recurrentes" view; for now mostly for
-  // verification and the detail panel to render the rule's name).
+  // List rules with per-rule enrichment (linked count, last charge date,
+  // annualised cost) plus a portfolio-level summary so the "Pagos
+  // recurrentes" view can render KPIs without a second roundtrip.
   app.get('/recurring-rules', async () => {
-    const rows = await db
-      .select()
+    const stats = await db
+      .select({
+        rule: recurringRules,
+        linkedCount: sql<number>`COUNT(${transactions.id}) FILTER (WHERE ${transactions.id} IS NOT NULL AND ${transactions.deletedAt} IS NULL)::int`,
+        lastChargedAt: sql<
+          string | null
+        >`TO_CHAR(MAX(${transactions.bookedAt}) FILTER (WHERE ${transactions.deletedAt} IS NULL), 'YYYY-MM-DD')`,
+      })
       .from(recurringRules)
+      .leftJoin(transactions, eq(transactions.recurringRuleId, recurringRules.id))
       .where(and(eq(recurringRules.userId, DEFAULT_USER_ID), isNull(recurringRules.deletedAt)))
-      .orderBy(recurringRules.name);
-    return rows.map(toRecurringRule);
+      .groupBy(recurringRules.id)
+      .orderBy(desc(recurringRules.detectedAutomatically), asc(recurringRules.name));
+
+    const items: RecurringRuleEnriched[] = stats.map((s) => {
+      const multiplier = ANNUAL_MULTIPLIER[s.rule.frequency] ?? 1;
+      const expected = new Decimal(s.rule.expectedAmount);
+      const annualCost = expected.times(multiplier);
+      return {
+        ...toRecurringRule(s.rule),
+        linkedCount: s.linkedCount,
+        lastChargedAt: s.lastChargedAt ?? null,
+        annualMultiplier: multiplier,
+        annualCost: annualCost.toFixed(2),
+      };
+    });
+
+    // Direction is driven by `kind` rather than the raw sign of
+    // `expectedAmount`: in the seed and manual flows the amount is often
+    // stored unsigned, so we cannot rely on it to bucket inflow vs outflow.
+    let monthlyOutflow = new Decimal(0);
+    let monthlyInflow = new Decimal(0);
+    let annualOutflow = new Decimal(0);
+    let annualInflow = new Decimal(0);
+    let activeCount = 0;
+    for (const it of items) {
+      if (it.status !== 'active') continue;
+      activeCount += 1;
+      const annualAbs = new Decimal(it.annualCost).abs();
+      const monthlyAbs = annualAbs.div(12);
+      if (it.kind === 'salary') {
+        annualInflow = annualInflow.plus(annualAbs);
+        monthlyInflow = monthlyInflow.plus(monthlyAbs);
+      } else {
+        annualOutflow = annualOutflow.plus(annualAbs);
+        monthlyOutflow = monthlyOutflow.plus(monthlyAbs);
+      }
+    }
+
+    const response: RecurringRulesListResponse = {
+      items,
+      summary: {
+        activeCount,
+        monthlyOutflow: monthlyOutflow.toFixed(2),
+        monthlyInflow: monthlyInflow.toFixed(2),
+        annualOutflow: annualOutflow.toFixed(2),
+        annualInflow: annualInflow.toFixed(2),
+      },
+    };
+    return response;
+  });
+
+  // Soft-delete a rule and unlink all its transactions in one step. The unlink
+  // path goes through the same logic as POST /unlink so behavior stays
+  // consistent (including the "delete rule when last tx unlinks" effect).
+  app.delete('/recurring-rules/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+
+    const unlinked = await db
+      .update(transactions)
+      .set({ recurringRuleId: null, updatedAt: new Date() })
+      .where(
+        and(
+          eq(transactions.recurringRuleId, params.id),
+          eq(transactions.userId, DEFAULT_USER_ID),
+          isNull(transactions.deletedAt),
+        ),
+      )
+      .returning({ id: transactions.id });
+
+    const result = await db
+      .update(recurringRules)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(recurringRules.id, params.id),
+          eq(recurringRules.userId, DEFAULT_USER_ID),
+          isNull(recurringRules.deletedAt),
+        ),
+      )
+      .returning({ id: recurringRules.id });
+
+    if (result.length === 0) {
+      return reply.code(404).send({ error: 'Regla no encontrada' });
+    }
+
+    const response: DeleteRecurringRuleResponse = {
+      unlinkedCount: unlinked.length,
+    };
+    return response;
   });
 
   app.get('/recurring-rules/:id', async (request, reply) => {
