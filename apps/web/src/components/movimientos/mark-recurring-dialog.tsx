@@ -34,6 +34,7 @@ const KIND_LABELS: Record<RecurringKind, string> = {
 const FREQUENCY_LABELS: Record<RecurringFrequency, string> = {
   weekly: 'Semanal',
   monthly: 'Mensual',
+  bimonthly: 'Bimestral',
   quarterly: 'Trimestral',
   biannual: 'Semestral',
   yearly: 'Anual',
@@ -87,6 +88,7 @@ function inferDefaults(transactions: TransactionListItem[]): {
       const avg = deltas.reduce((acc, d) => acc + d, 0) / deltas.length;
       if (avg < 10) frequency = 'weekly';
       else if (avg < 45) frequency = 'monthly';
+      else if (avg < 75) frequency = 'bimonthly';
       else if (avg < 130) frequency = 'quarterly';
       else if (avg < 230) frequency = 'biannual';
       else frequency = 'yearly';

@@ -49,6 +49,7 @@ export type PrepaymentMode = z.infer<typeof prepaymentModeSchema>;
 export const recurringFrequencySchema = z.enum([
   'weekly',
   'monthly',
+  'bimonthly',
   'quarterly',
   'biannual',
   'yearly',

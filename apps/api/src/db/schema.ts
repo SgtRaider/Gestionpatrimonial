@@ -124,6 +124,7 @@ export const recurringKindEnum = pgEnum('recurring_kind', [
 export const recurringFrequencyEnum = pgEnum('recurring_frequency', [
   'weekly',
   'monthly',
+  'bimonthly',
   'quarterly',
   'biannual',
   'yearly',

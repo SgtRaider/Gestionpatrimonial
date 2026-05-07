@@ -15,6 +15,13 @@
       "when": 1778159145813,
       "tag": "0001_worthless_eddie_brock",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778159531271,
+      "tag": "0002_regular_alice",
+      "breakpoints": true
     }
   ]
 }

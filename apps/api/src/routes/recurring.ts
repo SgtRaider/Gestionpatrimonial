@@ -19,6 +19,7 @@ import { recurringRules, transactions } from '../db/schema.js';
 const ANNUAL_MULTIPLIER: Record<string, number> = {
   weekly: 52,
   monthly: 12,
+  bimonthly: 6,
   quarterly: 4,
   biannual: 2,
   yearly: 1,
@@ -324,7 +325,7 @@ export const recurringRoutes: FastifyPluginAsync = async (app) => {
 
 function computeNextExpectedAt(
   lastBooked: Date,
-  frequency: 'weekly' | 'monthly' | 'quarterly' | 'biannual' | 'yearly' | 'custom',
+  frequency: 'weekly' | 'monthly' | 'bimonthly' | 'quarterly' | 'biannual' | 'yearly' | 'custom',
 ): string | null {
   const d = new Date(lastBooked);
   switch (frequency) {
@@ -333,6 +334,9 @@ function computeNextExpectedAt(
       break;
     case 'monthly':
       d.setUTCMonth(d.getUTCMonth() + 1);
+      break;
+    case 'bimonthly':
+      d.setUTCMonth(d.getUTCMonth() + 2);
       break;
     case 'quarterly':
       d.setUTCMonth(d.getUTCMonth() + 3);

@@ -20,6 +20,7 @@ const KIND_LABELS: Record<RecurringKind, string> = {
 const FREQUENCY_LABELS: Record<string, string> = {
   weekly: 'Semanal',
   monthly: 'Mensual',
+  bimonthly: 'Bimestral',
   quarterly: 'Trimestral',
   biannual: 'Semestral',
   yearly: 'Anual',
