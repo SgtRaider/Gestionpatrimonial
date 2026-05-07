@@ -7,7 +7,17 @@ import { cn } from '@/lib/cn';
 import { formatEur } from '@/lib/format';
 import type { GoalEnriched, PlannedEvent, PlannedEventKind } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import {
+  Area,
+  AreaChart,
+  CartesianGrid,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { AddEventDialog } from './add-event-dialog';
 import { AddGoalDialog } from './add-goal-dialog';
 
@@ -99,6 +109,8 @@ export function PlanificacionClient() {
         onDelete={(id) => deleteGoalMutation.mutate(id)}
       />
 
+      <CashFlowProjection events={eventsQuery.data ?? []} />
+
       <EventsSection
         events={eventsQuery.data ?? []}
         loading={eventsQuery.isLoading}
@@ -124,6 +136,133 @@ export function PlanificacionClient() {
       ) : null}
     </div>
   );
+}
+
+// 24-month forward look. Each event accumulates from `scheduledAt` onwards;
+// recurring events are expanded to 1 hit per occurrence inside the window
+// using their declared frequency. The chart shows the running net cash impact
+// — a forecast of "if every planned event happens, my balance moves like this
+// over and above today's reality".
+function CashFlowProjection({ events }: { events: PlannedEvent[] }) {
+  const data = useMemo(() => projectCashFlow(events, 24), [events]);
+  if (data.length === 0) return null;
+  const lastNet = data[data.length - 1]?.cumulative ?? 0;
+  return (
+    <section className="space-y-2">
+      <h2 className="text-sm uppercase tracking-wide text-[var(--color-muted)]">
+        Proyección a 24 meses
+      </h2>
+      <Card>
+        <CardHeader
+          title="Impacto neto acumulado"
+          subtitle={`Si todos los eventos se ejecutan, el saldo se mueve ${lastNet >= 0 ? '+' : ''}${formatEur(lastNet, { compact: true })}`}
+        />
+        <div className="h-64 -mx-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data}>
+              <defs>
+                <linearGradient id="planFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#16a34a" stopOpacity={0.25} />
+                  <stop offset="100%" stopColor="#16a34a" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="var(--color-muted)" />
+              <YAxis
+                tickFormatter={(v) => formatEur(v, { compact: true })}
+                tick={{ fontSize: 11 }}
+                stroke="var(--color-muted)"
+              />
+              <Tooltip
+                formatter={(v: number | string) => [
+                  formatEur(v, { compact: true }),
+                  'Neto acumulado',
+                ]}
+              />
+              <ReferenceLine y={0} stroke="var(--color-muted)" strokeDasharray="2 2" />
+              <Area
+                type="monotone"
+                dataKey="cumulative"
+                stroke={lastNet >= 0 ? '#16a34a' : '#dc2626'}
+                strokeWidth={2}
+                fill="url(#planFill)"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function projectCashFlow(events: PlannedEvent[], months: number) {
+  const today = new Date();
+  today.setUTCDate(1);
+  const monthKey = (d: Date) =>
+    `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  const buckets = new Map<string, number>();
+  const labels: string[] = [];
+  for (let i = 0; i < months; i++) {
+    const d = new Date(today);
+    d.setUTCMonth(d.getUTCMonth() + i);
+    const k = monthKey(d);
+    buckets.set(k, 0);
+    labels.push(k);
+  }
+
+  const horizon = new Date(today);
+  horizon.setUTCMonth(horizon.getUTCMonth() + months - 1);
+
+  for (const e of events) {
+    if (e.status === 'cancelled') continue;
+    const start = new Date(e.scheduledAt);
+    if (start > horizon) continue;
+    const amount = Number(e.amount);
+    const occurrences: Date[] = [];
+    if (!e.recurrenceFrequency || e.recurrenceFrequency === 'custom') {
+      occurrences.push(start);
+    } else {
+      const until = e.recurrenceUntil ? new Date(e.recurrenceUntil) : horizon;
+      const stop = until < horizon ? until : horizon;
+      const cur = new Date(start);
+      while (cur <= stop) {
+        occurrences.push(new Date(cur));
+        switch (e.recurrenceFrequency) {
+          case 'weekly':
+            cur.setUTCDate(cur.getUTCDate() + 7);
+            break;
+          case 'monthly':
+            cur.setUTCMonth(cur.getUTCMonth() + 1);
+            break;
+          case 'bimonthly':
+            cur.setUTCMonth(cur.getUTCMonth() + 2);
+            break;
+          case 'quarterly':
+            cur.setUTCMonth(cur.getUTCMonth() + 3);
+            break;
+          case 'biannual':
+            cur.setUTCMonth(cur.getUTCMonth() + 6);
+            break;
+          case 'yearly':
+            cur.setUTCFullYear(cur.getUTCFullYear() + 1);
+            break;
+        }
+      }
+    }
+    for (const occ of occurrences) {
+      if (occ < today) continue;
+      const key = monthKey(occ);
+      const prior = buckets.get(key);
+      if (prior === undefined) continue;
+      buckets.set(key, prior + amount);
+    }
+  }
+
+  let cumulative = 0;
+  return labels.map((m) => {
+    cumulative += buckets.get(m) ?? 0;
+    return { month: m, cumulative };
+  });
 }
 
 function GoalsSection({
