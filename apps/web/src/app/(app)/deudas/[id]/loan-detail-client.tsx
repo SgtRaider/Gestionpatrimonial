@@ -1,5 +1,6 @@
 'use client';
 
+import { AddRateReviewDialog } from '@/components/deudas/add-rate-review-dialog';
 import { InvestVsAmortizeDialog } from '@/components/deudas/invest-vs-amortize-dialog';
 import { PrepaymentDialog } from '@/components/deudas/prepayment-dialog';
 import { PageHeader } from '@/components/layout/page-header';
@@ -7,8 +8,8 @@ import { Card, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { formatEur, formatPct } from '@/lib/format';
-import type { LoanDetail } from '@gp/shared';
-import { useQuery } from '@tanstack/react-query';
+import type { LoanDetail, LoanScheduleRow } from '@gp/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
@@ -59,6 +60,22 @@ function Body({ loan }: { loan: LoanDetail }) {
   });
   const [showPrepayment, setShowPrepayment] = useState(false);
   const [showInvestCompare, setShowInvestCompare] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<LoanScheduleRow | null>(null);
+  const queryClient = useQueryClient();
+
+  const reviewMutation = useMutation({
+    mutationFn: (input: {
+      effectiveAt: string;
+      rate: string;
+      source: 'contract' | 'review' | 'novation';
+      indexValueAtReview?: string;
+    }) => api.addLoanRateHistory(loan.id, input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loan', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setReviewTarget(null);
+    },
+  });
 
   // Auto-open the simulator when arriving from a `mortgage_vs_invest` insight.
   const searchParams = useSearchParams();
@@ -290,21 +307,23 @@ function Body({ loan }: { loan: LoanDetail }) {
                       <span className="inline-flex items-center gap-1">
                         {formatMonth(row.dueAt)}
                         {review ? (
-                          <span
-                            className={cn(
-                              'text-[10px] px-1 py-0.5 rounded',
-                              review.kind === 'recorded'
-                                ? 'bg-[var(--color-accent)]/15 text-[var(--color-accent)]'
-                                : 'bg-[var(--color-muted)]/15 text-[var(--color-muted)]',
-                            )}
-                            title={
-                              review.kind === 'recorded'
-                                ? `Revisión registrada: ${formatPct(review.rate)}`
-                                : `Revisión proyectada (Euribor + diferencial): mantiene ${formatPct(review.rate)} hasta que el banco actualice el tipo`
-                            }
-                          >
-                            📅 {formatPct(review.rate)}
-                          </span>
+                          review.kind === 'projected' ? (
+                            <button
+                              type="button"
+                              onClick={() => setReviewTarget(row)}
+                              className="text-[10px] px-1 py-0.5 rounded bg-[var(--color-muted)]/15 text-[var(--color-muted)] hover:bg-[var(--color-accent)]/15 hover:text-[var(--color-accent)] cursor-pointer"
+                              title="Revisión proyectada — clic para registrar el tipo real"
+                            >
+                              📅 {formatPct(review.rate)}
+                            </button>
+                          ) : (
+                            <span
+                              className="text-[10px] px-1 py-0.5 rounded bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+                              title={`Revisión registrada: ${formatPct(review.rate)}`}
+                            >
+                              📅 {formatPct(review.rate)}
+                            </span>
+                          )
                         ) : null}
                       </span>
                     </td>
@@ -378,6 +397,16 @@ function Body({ loan }: { loan: LoanDetail }) {
       ) : null}
       {showInvestCompare ? (
         <InvestVsAmortizeDialog loan={loan} onClose={() => setShowInvestCompare(false)} />
+      ) : null}
+      {reviewTarget ? (
+        <AddRateReviewDialog
+          defaultEffectiveAt={reviewTarget.dueAt}
+          defaultRate={reviewTarget.rateApplied}
+          rateSpread={loan.rateSpread}
+          isPending={reviewMutation.isPending}
+          onConfirm={(input) => reviewMutation.mutate(input)}
+          onDismiss={() => setReviewTarget(null)}
+        />
       ) : null}
     </div>
   );

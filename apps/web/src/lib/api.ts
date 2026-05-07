@@ -1,5 +1,6 @@
 import {
   type AccountWithInstitution,
+  type AddLoanRateHistoryInput,
   type BulkCategorizeInput,
   type BulkCategorizeResponse,
   type Category,
@@ -141,6 +142,20 @@ export const api = {
   ): Promise<PrepaymentSimulationResponse> =>
     send('POST', `/api/loans/${loanId}/simulate-prepayment`, input, (raw) =>
       prepaymentSimulationResponseSchema.parse(raw),
+    ),
+
+  addLoanRateHistory: (
+    loanId: string,
+    input: AddLoanRateHistoryInput,
+  ): Promise<{ effectiveAt: string; rate: string; source: string }> =>
+    send('POST', `/api/loans/${loanId}/rate-history`, input, (raw) =>
+      z
+        .object({
+          effectiveAt: z.string(),
+          rate: z.string(),
+          source: z.string(),
+        })
+        .parse(raw),
     ),
 
   patchTransaction: (id: string, patch: TransactionPatch) =>

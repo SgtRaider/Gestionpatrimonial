@@ -73,6 +73,15 @@ export const loanRateHistoryRowSchema = z.object({
 });
 export type LoanRateHistoryRow = z.infer<typeof loanRateHistoryRowSchema>;
 
+export const addLoanRateHistoryInputSchema = z.object({
+  effectiveAt: z.string().date(),
+  rate: decimalString,
+  source: z.enum(['contract', 'review', 'novation']).default('review'),
+  indexValueAtReview: decimalString.optional(),
+  notes: z.string().max(500).optional(),
+});
+export type AddLoanRateHistoryInput = z.infer<typeof addLoanRateHistoryInputSchema>;
+
 export const loanDetailSchema = loanSummarySchema.extend({
   principalInitial: decimalString,
   prepaymentFeePct: decimalString.nullable(),

@@ -2,11 +2,13 @@ import {
   type LoanDetail,
   type LoanSummary,
   type PrepaymentSimulationResponse,
+  addLoanRateHistoryInputSchema,
   prepaymentSimulationInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import { and, asc, eq, gte, isNull, lte } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
+import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { db } from '../db/index.js';
 import { loanRateHistory, loans, transactions } from '../db/schema.js';
@@ -159,6 +161,40 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
       orphanPayments: matched.orphans,
     };
     return detail;
+  });
+
+  // Record a rate review (variable / mixed loans get one each anniversary).
+  // The schedule recomputes from this row on the next /loans/:id load — the
+  // amortization engine reads `loan_rate_history` ordered by effective date.
+  app.post('/loans/:id/rate-history', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = addLoanRateHistoryInputSchema.parse(request.body);
+
+    const data = await loadLoanWithRates(params.id);
+    if (!data) return reply.code(404).send({ error: 'Préstamo no encontrado' });
+
+    const [inserted] = await db
+      .insert(loanRateHistory)
+      .values({
+        id: uuidv7(),
+        loanId: params.id,
+        effectiveAt: body.effectiveAt,
+        rate: body.rate,
+        indexValueAtReview: body.indexValueAtReview ?? null,
+        spread: data.loan.rateSpread,
+        source: body.source,
+        notes: body.notes ?? null,
+      })
+      .returning();
+
+    if (!inserted) {
+      return reply.code(500).send({ error: 'No se pudo registrar la revisión' });
+    }
+    return {
+      effectiveAt: inserted.effectiveAt,
+      rate: inserted.rate,
+      source: inserted.source,
+    };
   });
 
   app.post('/loans/:id/simulate-prepayment', async (request, reply) => {
