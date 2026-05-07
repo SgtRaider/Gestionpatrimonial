@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation';
 
 const TABS = [
   { href: '/cuentas/movimientos', label: 'Movimientos', icon: '📊' },
+  { href: '/cuentas/cola', label: 'Categorizar', icon: '🏷' },
   { href: '/cuentas/recurrentes', label: 'Recurrentes', icon: '🔁' },
   { href: '/cuentas/importar', label: 'Importar', icon: '↑' },
 ] as const;

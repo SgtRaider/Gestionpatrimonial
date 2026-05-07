@@ -3,6 +3,7 @@ import {
   type AddLoanRateHistoryInput,
   type BulkCategorizeInput,
   type BulkCategorizeResponse,
+  type CategorizationQueueResponse,
   type Category,
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
@@ -41,6 +42,7 @@ import {
   type UpdateRecurringRuleInput,
   accountWithInstitutionSchema,
   bulkCategorizeResponseSchema,
+  categorizationQueueResponseSchema,
   categorySchema,
   createCategorizationRuleResponseSchema,
   dashboardSchema,
@@ -223,6 +225,9 @@ export const api = {
 
   getCategories: (): Promise<Category[]> =>
     get('/api/categories', (raw) => z.array(categorySchema).parse(raw)),
+
+  getCategorizationQueue: (): Promise<CategorizationQueueResponse> =>
+    get('/api/categorization-queue', (raw) => categorizationQueueResponseSchema.parse(raw)),
 
   getLoans: (): Promise<LoanSummary[]> =>
     get('/api/loans', (raw) => z.array(loanSummarySchema).parse(raw)),

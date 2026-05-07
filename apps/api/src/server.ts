@@ -3,6 +3,7 @@ import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import Fastify from 'fastify';
 import { config } from './config.js';
+import { categorizationQueueRoutes } from './routes/categorization-queue.js';
 import { categorizationRulesRoutes } from './routes/categorization-rules.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { goalsRoutes } from './routes/goals.js';
@@ -36,6 +37,7 @@ async function buildServer() {
   await app.register(dashboardRoutes, { prefix: '/api' });
   await app.register(transactionsRoutes, { prefix: '/api' });
   await app.register(categorizationRulesRoutes, { prefix: '/api' });
+  await app.register(categorizationQueueRoutes, { prefix: '/api' });
   await app.register(importsRoutes, { prefix: '/api' });
   await app.register(loansRoutes, { prefix: '/api' });
   await app.register(recurringRoutes, { prefix: '/api' });
