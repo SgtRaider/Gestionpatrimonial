@@ -202,6 +202,170 @@ export function summarizeSchedule(rows: AmortizationRow[]): ScheduleSummary {
   };
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Prepayment simulation
+// ────────────────────────────────────────────────────────────────────────────
+
+export type PrepaymentSimulation = {
+  appliedAt: string; // YYYY-MM-DD: due date of the first cuota AFTER the prepayment
+  appliedPeriod: number;
+  outstandingBefore: string;
+  outstandingAfter: string;
+  baseline: {
+    payment: string;
+    termMonths: number;
+    finalDate: string;
+    totalInterestRemaining: string;
+  };
+  withPrepayment: {
+    payment: string;
+    termMonths: number;
+    finalDate: string;
+    totalInterestRemaining: string;
+  };
+  interestSaved: string;
+  monthsSaved: number;
+  paymentDelta: string; // withPrepayment.payment - baseline.payment
+};
+
+export function simulatePrepayment(
+  baseline: AmortizationRow[],
+  amount: string,
+  occurredAt: Date,
+  mode: 'reduce_term' | 'reduce_payment',
+): PrepaymentSimulation | null {
+  if (baseline.length === 0) return null;
+  const occYmd = ymd(occurredAt);
+
+  // Find the first pending period strictly after the occurredAt date.
+  const applyIdx = baseline.findIndex((r) => r.dueAt > occYmd);
+  if (applyIdx === -1) return null; // loan already paid off
+  const applyAt = baseline[applyIdx];
+  if (!applyAt) return null;
+
+  // Outstanding right BEFORE this period = the previous row's outstandingAfter
+  // (or principal initial if applying before the first period).
+  const prev = applyIdx > 0 ? baseline[applyIdx - 1] : null;
+  const outstandingBefore = new Decimal(
+    prev ? prev.outstandingAfter : (baseline[0]?.outstandingAfter ?? '0'),
+  );
+  // For applyIdx === 0 we want pre-first-period outstanding = principal. We
+  // can derive that from row 0: outstandingBefore = outstandingAfter + principal.
+  const beforeFirst =
+    applyIdx === 0
+      ? new Decimal(applyAt.outstandingAfter).plus(applyAt.principal)
+      : outstandingBefore;
+
+  const prepayAmount = new Decimal(amount);
+  const outstandingAfterPrepay = beforeFirst.minus(prepayAmount);
+  if (outstandingAfterPrepay.isNegative()) {
+    // Prepayment exceeds outstanding — the loan ends right at this period.
+    return {
+      appliedAt: applyAt.dueAt,
+      appliedPeriod: applyAt.period,
+      outstandingBefore: beforeFirst.toFixed(2),
+      outstandingAfter: '0.00',
+      baseline: baselineRemainingFrom(baseline, applyIdx),
+      withPrepayment: {
+        payment: '0.00',
+        termMonths: 0,
+        finalDate: applyAt.dueAt,
+        totalInterestRemaining: '0.00',
+      },
+      interestSaved: baselineRemainingFrom(baseline, applyIdx).totalInterestRemaining,
+      monthsSaved: baseline.length - applyIdx,
+      paymentDelta: '0.00',
+    };
+  }
+
+  // Original cuota at the prepayment point. For variable-rate loans this is the
+  // cuota at the most recent rate revision (which is what the bank charges).
+  const originalCuota = new Decimal(applyAt.payment);
+  // Use the rate currently in effect at the prepayment date as the simulation
+  // rate (assumes no future revisions — a reasonable approximation for a
+  // forward-looking estimate the user can use to decide).
+  const annualPct = new Decimal(applyAt.rateApplied);
+  const monthlyRate = annualPct.div(100).div(12);
+  const baselineRemaining = baseline.length - applyIdx;
+
+  let newCuota: Decimal;
+  let newTerm: number;
+  if (mode === 'reduce_term') {
+    newCuota = originalCuota;
+    // Walk forward, accumulating until outstanding hits 0.
+    let remaining = outstandingAfterPrepay;
+    let months = 0;
+    const maxIter = baselineRemaining + 12; // safety net
+    while (remaining.greaterThan(0) && months < maxIter) {
+      const interest = remaining.times(monthlyRate);
+      let principal = newCuota.minus(interest);
+      if (principal.greaterThan(remaining)) principal = remaining;
+      remaining = remaining.minus(principal);
+      months++;
+    }
+    newTerm = months;
+  } else {
+    newTerm = baselineRemaining;
+    if (monthlyRate.isZero()) {
+      newCuota = outstandingAfterPrepay.div(newTerm);
+    } else {
+      const factor = powInt(monthlyRate.plus(1), newTerm);
+      newCuota = outstandingAfterPrepay.times(monthlyRate).times(factor).div(factor.minus(1));
+    }
+  }
+
+  // Total interest remaining under the new schedule, walking month-by-month.
+  let outstanding = outstandingAfterPrepay;
+  let totalInterest = new Decimal(0);
+  for (let i = 0; i < newTerm; i++) {
+    const interest = outstanding.times(monthlyRate);
+    let principal = newCuota.minus(interest);
+    if (i === newTerm - 1 || principal.greaterThan(outstanding)) {
+      principal = outstanding;
+    }
+    totalInterest = totalInterest.plus(interest);
+    outstanding = outstanding.minus(principal);
+  }
+
+  const baselineSummary = baselineRemainingFrom(baseline, applyIdx);
+  const finalDate = ymd(addMonths(occurredAt, newTerm));
+  const interestSaved = new Decimal(baselineSummary.totalInterestRemaining)
+    .minus(totalInterest)
+    .toFixed(2);
+  const monthsSaved = baselineRemaining - newTerm;
+
+  return {
+    appliedAt: applyAt.dueAt,
+    appliedPeriod: applyAt.period,
+    outstandingBefore: beforeFirst.toFixed(2),
+    outstandingAfter: outstandingAfterPrepay.toFixed(2),
+    baseline: baselineSummary,
+    withPrepayment: {
+      payment: newCuota.toFixed(2),
+      termMonths: newTerm,
+      finalDate,
+      totalInterestRemaining: totalInterest.toFixed(2),
+    },
+    interestSaved,
+    monthsSaved,
+    paymentDelta: newCuota.minus(originalCuota).toFixed(2),
+  };
+}
+
+function baselineRemainingFrom(baseline: AmortizationRow[], fromIdx: number) {
+  const slice = baseline.slice(fromIdx);
+  const last = slice[slice.length - 1];
+  let total = new Decimal(0);
+  for (const r of slice) total = total.plus(r.interest);
+  const first = slice[0];
+  return {
+    payment: first?.payment ?? '0.00',
+    termMonths: slice.length,
+    finalDate: last?.dueAt ?? first?.dueAt ?? '',
+    totalInterestRemaining: total.toFixed(2),
+  };
+}
+
 // Walks the schedule once and reports current state given a "today" anchor.
 // Returns the last paid period (or 0 if none) and the next pending period.
 export function locateCurrentPeriod(

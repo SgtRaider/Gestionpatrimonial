@@ -1,4 +1,9 @@
-import type { LoanDetail, LoanSummary } from '@gp/shared';
+import {
+  type LoanDetail,
+  type LoanSummary,
+  type PrepaymentSimulationResponse,
+  prepaymentSimulationInputSchema,
+} from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -10,6 +15,7 @@ import {
   type RateChange,
   generateSchedule,
   locateCurrentPeriod,
+  simulatePrepayment,
   summarizeSchedule,
 } from '../services/amortization.js';
 
@@ -135,5 +141,44 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
       lastPaidPeriod: cur.lastPaidPeriod,
     };
     return detail;
+  });
+
+  app.post('/loans/:id/simulate-prepayment', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = prepaymentSimulationInputSchema.parse(request.body);
+    const data = await loadLoanWithRates(params.id);
+    if (!data) return reply.code(404).send({ error: 'Préstamo no encontrado' });
+
+    const schedule = buildSchedule(data.loan, data.rateRows);
+    const sim = simulatePrepayment(
+      schedule,
+      body.amount,
+      new Date(`${body.occurredAt}T00:00:00Z`),
+      body.mode,
+    );
+    if (!sim) {
+      return reply.code(400).send({
+        error: 'No se puede aplicar la amortización (préstamo ya saldado o fecha posterior al fin)',
+      });
+    }
+
+    const feePct = data.loan.prepaymentFeePct
+      ? new Decimal(data.loan.prepaymentFeePct)
+      : new Decimal(0);
+    const fee = new Decimal(body.amount).times(feePct).div(100).toFixed(2);
+
+    const response: PrepaymentSimulationResponse = {
+      appliedAt: sim.appliedAt,
+      appliedPeriod: sim.appliedPeriod,
+      outstandingBefore: sim.outstandingBefore,
+      outstandingAfter: sim.outstandingAfter,
+      fee,
+      baseline: sim.baseline,
+      withPrepayment: sim.withPrepayment,
+      interestSaved: sim.interestSaved,
+      monthsSaved: sim.monthsSaved,
+      paymentDelta: sim.paymentDelta,
+    };
+    return response;
   });
 };

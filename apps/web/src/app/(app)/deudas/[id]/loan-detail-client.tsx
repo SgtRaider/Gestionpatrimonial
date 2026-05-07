@@ -1,5 +1,6 @@
 'use client';
 
+import { PrepaymentDialog } from '@/components/deudas/prepayment-dialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
@@ -54,6 +55,7 @@ function Body({ loan }: { loan: LoanDetail }) {
     const focus = Math.max(0, loan.lastPaidPeriod - 5);
     return Math.floor(focus / SCHEDULE_PAGE_SIZE);
   });
+  const [showPrepayment, setShowPrepayment] = useState(false);
 
   const principalInitial = Number(loan.principalInitial);
   const outstandingNow = Number(loan.outstanding);
@@ -75,12 +77,21 @@ function Body({ loan }: { loan: LoanDetail }) {
         title={loan.alias ?? loan.lender}
         subtitle={`${loan.lender} · Hipoteca · ${loan.amortizationSystem === 'french' ? 'sistema francés' : loan.amortizationSystem}`}
         actions={
-          <Link
-            href="/deudas"
-            className="text-sm px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)]"
-          >
-            ← Deudas
-          </Link>
+          <>
+            <button
+              type="button"
+              onClick={() => setShowPrepayment(true)}
+              className="text-sm px-3 py-1.5 rounded bg-[var(--color-accent)] text-white"
+            >
+              💰 Simular amortización
+            </button>
+            <Link
+              href="/deudas"
+              className="text-sm px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+            >
+              ← Deudas
+            </Link>
+          </>
         }
       />
 
@@ -258,6 +269,10 @@ function Body({ loan }: { loan: LoanDetail }) {
           </table>
         </div>
       </Card>
+
+      {showPrepayment ? (
+        <PrepaymentDialog loan={loan} onClose={() => setShowPrepayment(false)} />
+      ) : null}
     </div>
   );
 }

@@ -11,6 +11,8 @@ import {
   type ImportPreviewResponse,
   type LoanDetail,
   type LoanSummary,
+  type PrepaymentSimulationInput,
+  type PrepaymentSimulationResponse,
   type TransactionListResponse,
   type TransactionPatch,
   accountWithInstitutionSchema,
@@ -22,6 +24,7 @@ import {
   importPreviewResponseSchema,
   loanDetailSchema,
   loanSummarySchema,
+  prepaymentSimulationResponseSchema,
   transactionListResponseSchema,
 } from '@gp/shared';
 import { z } from 'zod';
@@ -118,6 +121,14 @@ export const api = {
 
   getLoan: (id: string): Promise<LoanDetail> =>
     get(`/api/loans/${id}`, (raw) => loanDetailSchema.parse(raw)),
+
+  simulatePrepayment: (
+    loanId: string,
+    input: PrepaymentSimulationInput,
+  ): Promise<PrepaymentSimulationResponse> =>
+    send('POST', `/api/loans/${loanId}/simulate-prepayment`, input, (raw) =>
+      prepaymentSimulationResponseSchema.parse(raw),
+    ),
 
   patchTransaction: (id: string, patch: TransactionPatch) =>
     send('PATCH', `/api/transactions/${id}`, patch, (raw) =>

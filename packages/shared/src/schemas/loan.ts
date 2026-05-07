@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { amortizationSystemSchema, loanKindSchema, rateTypeSchema } from '../enums.js';
+import {
+  amortizationSystemSchema,
+  loanKindSchema,
+  prepaymentModeSchema,
+  rateTypeSchema,
+} from '../enums.js';
 import { decimalString } from './transaction.js';
 
 export const loanSummarySchema = z.object({
@@ -58,3 +63,32 @@ export const loanDetailSchema = loanSummarySchema.extend({
   lastPaidPeriod: z.number().int().nonnegative(),
 });
 export type LoanDetail = z.infer<typeof loanDetailSchema>;
+
+export const prepaymentSimulationInputSchema = z.object({
+  amount: decimalString,
+  occurredAt: z.string().date(),
+  mode: prepaymentModeSchema,
+});
+export type PrepaymentSimulationInput = z.infer<typeof prepaymentSimulationInputSchema>;
+
+export const prepaymentScenarioSchema = z.object({
+  payment: decimalString,
+  termMonths: z.number().int().nonnegative(),
+  finalDate: z.string().date(),
+  totalInterestRemaining: decimalString,
+});
+export type PrepaymentScenario = z.infer<typeof prepaymentScenarioSchema>;
+
+export const prepaymentSimulationResponseSchema = z.object({
+  appliedAt: z.string().date(),
+  appliedPeriod: z.number().int().positive(),
+  outstandingBefore: decimalString,
+  outstandingAfter: decimalString,
+  fee: decimalString, // Computed from prepaymentFeePct × amount.
+  baseline: prepaymentScenarioSchema,
+  withPrepayment: prepaymentScenarioSchema,
+  interestSaved: decimalString,
+  monthsSaved: z.number().int(),
+  paymentDelta: decimalString, // Negative when "reduce_payment" lowers the cuota.
+});
+export type PrepaymentSimulationResponse = z.infer<typeof prepaymentSimulationResponseSchema>;
