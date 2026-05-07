@@ -20,6 +20,8 @@ import {
 } from 'recharts';
 import { AddEventDialog } from './add-event-dialog';
 import { AddGoalDialog } from './add-goal-dialog';
+import { EditEventDialog } from './edit-event-dialog';
+import { EditGoalDialog } from './edit-goal-dialog';
 
 const KIND_LABEL: Record<PlannedEventKind, string> = {
   expense: 'Gasto',
@@ -44,6 +46,8 @@ export function PlanificacionClient() {
   const queryClient = useQueryClient();
   const [showAddGoal, setShowAddGoal] = useState(false);
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<GoalEnriched | null>(null);
+  const [editingEvent, setEditingEvent] = useState<PlannedEvent | null>(null);
 
   const goalsQuery = useQuery({ queryKey: ['goals'], queryFn: api.getGoals });
   const eventsQuery = useQuery({
@@ -63,6 +67,15 @@ export function PlanificacionClient() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['goals'] }),
   });
 
+  const updateGoalMutation = useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Parameters<typeof api.updateGoal>[1] }) =>
+      api.updateGoal(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['goals'] });
+      setEditingGoal(null);
+    },
+  });
+
   const createEventMutation = useMutation({
     mutationFn: api.createPlannedEvent,
     onSuccess: () => {
@@ -76,6 +89,19 @@ export function PlanificacionClient() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['planned-events'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+  });
+
+  const updateEventMutation = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: { id: string; patch: Parameters<typeof api.updatePlannedEvent>[1] }) =>
+      api.updatePlannedEvent(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['planned-events'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setEditingEvent(null);
     },
   });
 
@@ -107,6 +133,7 @@ export function PlanificacionClient() {
         goals={goalsQuery.data ?? []}
         loading={goalsQuery.isLoading}
         onDelete={(id) => deleteGoalMutation.mutate(id)}
+        onEdit={setEditingGoal}
       />
 
       <CashFlowProjection events={eventsQuery.data ?? []} />
@@ -115,6 +142,7 @@ export function PlanificacionClient() {
         events={eventsQuery.data ?? []}
         loading={eventsQuery.isLoading}
         onDelete={(id) => deleteEventMutation.mutate(id)}
+        onEdit={setEditingEvent}
       />
 
       {showAddGoal ? (
@@ -132,6 +160,24 @@ export function PlanificacionClient() {
           isPending={createEventMutation.isPending}
           onConfirm={(input) => createEventMutation.mutate({ ...input, currency: 'EUR' })}
           onDismiss={() => setShowAddEvent(false)}
+        />
+      ) : null}
+
+      {editingGoal ? (
+        <EditGoalDialog
+          goal={editingGoal}
+          isPending={updateGoalMutation.isPending}
+          onConfirm={(patch) => updateGoalMutation.mutate({ id: editingGoal.id, patch })}
+          onDismiss={() => setEditingGoal(null)}
+        />
+      ) : null}
+
+      {editingEvent ? (
+        <EditEventDialog
+          event={editingEvent}
+          isPending={updateEventMutation.isPending}
+          onConfirm={(patch) => updateEventMutation.mutate({ id: editingEvent.id, patch })}
+          onDismiss={() => setEditingEvent(null)}
         />
       ) : null}
     </div>
@@ -269,10 +315,12 @@ function GoalsSection({
   goals,
   loading,
   onDelete,
+  onEdit,
 }: {
   goals: GoalEnriched[];
   loading: boolean;
   onDelete: (id: string) => void;
+  onEdit: (g: GoalEnriched) => void;
 }) {
   return (
     <section className="space-y-2">
@@ -289,7 +337,7 @@ function GoalsSection({
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {goals.map((g) => (
-            <GoalCard key={g.id} goal={g} onDelete={onDelete} />
+            <GoalCard key={g.id} goal={g} onDelete={onDelete} onEdit={onEdit} />
           ))}
         </div>
       )}
@@ -300,9 +348,11 @@ function GoalsSection({
 function GoalCard({
   goal,
   onDelete,
+  onEdit,
 }: {
   goal: GoalEnriched;
   onDelete: (id: string) => void;
+  onEdit: (g: GoalEnriched) => void;
 }) {
   const remaining = Math.max(0, Number(goal.targetAmount) - Number(goal.currentAmount));
   return (
@@ -326,6 +376,14 @@ function GoalCard({
           >
             {goal.onTrack ? 'En camino' : 'Apretado'}
           </span>
+          <button
+            type="button"
+            onClick={() => onEdit(goal)}
+            aria-label="Editar"
+            className="text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+          >
+            ✏️
+          </button>
           <button
             type="button"
             onClick={() => onDelete(goal.id)}
@@ -372,10 +430,12 @@ function EventsSection({
   events,
   loading,
   onDelete,
+  onEdit,
 }: {
   events: PlannedEvent[];
   loading: boolean;
   onDelete: (id: string) => void;
+  onEdit: (e: PlannedEvent) => void;
 }) {
   // Bucket past, upcoming-3-months, beyond.
   const today = new Date().toISOString().slice(0, 10);
@@ -417,14 +477,24 @@ function EventsSection({
                   >
                     {formatEur(e.amount)}
                   </span>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(e.id)}
-                    aria-label="Eliminar"
-                    className="text-[var(--color-muted)] hover:text-[var(--color-negative)]"
-                  >
-                    🗑
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(e)}
+                      aria-label="Editar"
+                      className="text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(e.id)}
+                      aria-label="Eliminar"
+                      className="text-[var(--color-muted)] hover:text-[var(--color-negative)]"
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </li>
               );
             })}
