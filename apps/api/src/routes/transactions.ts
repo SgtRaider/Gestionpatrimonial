@@ -234,6 +234,13 @@ export const transactionsRoutes: FastifyPluginAsync = async (app) => {
     if ('categoryId' in body) updateFields.categoryId = body.categoryId;
     if ('notes' in body) updateFields.notes = body.notes;
     if ('merchantAliasUser' in body) updateFields.merchantAliasUser = body.merchantAliasUser;
+    if ('amount' in body) updateFields.amount = body.amount;
+    if ('bookedAt' in body && body.bookedAt) {
+      updateFields.bookedAt = new Date(`${body.bookedAt}T10:00:00Z`);
+    }
+    if ('accountId' in body) updateFields.accountId = body.accountId;
+    if ('descriptionRaw' in body) updateFields.descriptionRaw = body.descriptionRaw;
+    if ('counterparty' in body) updateFields.counterparty = body.counterparty;
 
     const updated = await db
       .update(transactions)

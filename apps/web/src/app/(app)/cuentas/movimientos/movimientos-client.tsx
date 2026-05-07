@@ -3,6 +3,7 @@
 import { PageHeader } from '@/components/layout/page-header';
 import { BulkActionBar } from '@/components/movimientos/bulk-action-bar';
 import { CreateRuleDialog } from '@/components/movimientos/create-rule-dialog';
+import { EditTransactionDialog } from '@/components/movimientos/edit-transaction-dialog';
 import { MarkRecurringDialog } from '@/components/movimientos/mark-recurring-dialog';
 import { TransactionDetail } from '@/components/movimientos/transaction-detail';
 import { TransactionsTable } from '@/components/movimientos/transactions-table';
@@ -47,6 +48,7 @@ export function MovimientosClient() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [pendingRule, setPendingRule] = useState<PendingRule | null>(null);
   const [recurringSelection, setRecurringSelection] = useState<TransactionListItem[] | null>(null);
+  const [editingTx, setEditingTx] = useState<TransactionListItem | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
   // Auto-dismiss toasts after a delay so they don't pile up.
@@ -213,6 +215,22 @@ export function MovimientosClient() {
         tone: 'error',
       });
     },
+  });
+
+  const editTxMutation = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: { id: string; patch: Parameters<typeof api.patchTransaction>[1] }) =>
+      api.patchTransaction(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['net-worth'] });
+      setEditingTx(null);
+      showToast({ message: 'Movimiento actualizado', tone: 'success' });
+    },
+    onError: () => showToast({ message: 'No se pudo actualizar el movimiento', tone: 'error' }),
   });
 
   const unlinkRecurringMutation = useMutation({
@@ -430,6 +448,7 @@ export function MovimientosClient() {
               onUnlinkRecurring={(tx) =>
                 unlinkRecurringMutation.mutate({ transactionIds: [tx.id] })
               }
+              onEdit={setEditingTx}
               isRecurringPending={
                 markRecurringMutation.isPending || unlinkRecurringMutation.isPending
               }
@@ -448,6 +467,7 @@ export function MovimientosClient() {
               onUnlinkRecurring={(tx) =>
                 unlinkRecurringMutation.mutate({ transactionIds: [tx.id] })
               }
+              onEdit={setEditingTx}
               isRecurringPending={
                 markRecurringMutation.isPending || unlinkRecurringMutation.isPending
               }
@@ -499,6 +519,16 @@ export function MovimientosClient() {
             })
           }
           onDismiss={() => setRecurringSelection(null)}
+        />
+      ) : null}
+
+      {editingTx ? (
+        <EditTransactionDialog
+          tx={editingTx}
+          accounts={accountsQuery.data ?? []}
+          isPending={editTxMutation.isPending}
+          onConfirm={(patch) => editTxMutation.mutate({ id: editingTx.id, patch })}
+          onDismiss={() => setEditingTx(null)}
         />
       ) : null}
 

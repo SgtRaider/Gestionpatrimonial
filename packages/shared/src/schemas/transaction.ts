@@ -68,6 +68,12 @@ export const transactionPatchSchema = z
     notes: z.string().max(2000).nullable(),
     merchantAliasUser: z.string().max(200).nullable(),
     tags: z.array(z.string().max(50)),
+    // Editable to fix typos in imports / manual entries.
+    amount: decimalString,
+    bookedAt: z.string().date(),
+    accountId: z.string().uuid(),
+    descriptionRaw: z.string().min(1).max(500),
+    counterparty: z.string().max(200).nullable(),
   })
   .partial();
 export type TransactionPatch = z.infer<typeof transactionPatchSchema>;

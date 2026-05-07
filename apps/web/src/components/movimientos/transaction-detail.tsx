@@ -17,12 +17,14 @@ export function TransactionDetail({
   onClose,
   onMarkRecurring,
   onUnlinkRecurring,
+  onEdit,
   isRecurringPending,
 }: {
   tx: TransactionListItem | null;
   onClose: () => void;
   onMarkRecurring: (tx: TransactionListItem) => void;
   onUnlinkRecurring: (tx: TransactionListItem) => void;
+  onEdit: (tx: TransactionListItem) => void;
   isRecurringPending: boolean;
 }) {
   if (!tx) {
@@ -134,6 +136,13 @@ export function TransactionDetail({
       </div>
 
       <div className="pt-3 border-t border-[var(--color-border)] flex flex-wrap gap-2 text-xs">
+        <button
+          type="button"
+          onClick={() => onEdit(tx)}
+          className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)]"
+        >
+          ✏️ Editar
+        </button>
         {tx.recurringRuleId ? (
           <button
             type="button"
@@ -153,18 +162,6 @@ export function TransactionDetail({
             🔁 Marcar recurrente
           </button>
         )}
-        <button
-          type="button"
-          className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)]"
-        >
-          ⇄ Marcar transfer
-        </button>
-        <button
-          type="button"
-          className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)]"
-        >
-          ✂ Dividir
-        </button>
       </div>
     </Card>
   );
