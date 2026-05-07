@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn';
 import { formatEur } from '@/lib/format';
 import type { NetWorthAccount, NetWorthSnapshot } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -31,10 +31,21 @@ const ACCOUNT_TYPE_LABELS: Record<NetWorthAccount['type'], string> = {
   other: 'Otro',
 };
 
+type Toast = { id: number; message: string; tone: 'success' | 'error' };
+
 export function PatrimonioClient() {
   const queryClient = useQueryClient();
   const [showAddHolding, setShowAddHolding] = useState(false);
   const [openHoldingId, setOpenHoldingId] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => {
+      setToast((current) => (current?.id === toast.id ? null : current));
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [toast]);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['net-worth'],
     queryFn: api.getNetWorth,
@@ -50,10 +61,22 @@ export function PatrimonioClient() {
   });
 
   const snapshotMutation = useMutation({
-    mutationFn: api.createNetWorthSnapshot,
-    onSuccess: () => {
+    mutationFn: () => api.createNetWorthSnapshot(),
+    onSuccess: (snap) => {
       queryClient.invalidateQueries({ queryKey: ['net-worth-snapshots'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setToast({
+        id: Date.now(),
+        message: `✓ Foto guardada · ${snap.snapshotAt} · ${formatEur(snap.netWorth, { compact: true })}`,
+        tone: 'success',
+      });
+    },
+    onError: (err) => {
+      setToast({
+        id: Date.now(),
+        message: `Error al guardar foto: ${err instanceof Error ? err.message : 'desconocido'}`,
+        tone: 'error',
+      });
     },
   });
 
@@ -140,6 +163,26 @@ export function PatrimonioClient() {
 
       {openHoldingId ? (
         <HoldingDetailDialog holdingId={openHoldingId} onDismiss={() => setOpenHoldingId(null)} />
+      ) : null}
+
+      {toast ? (
+        <output
+          key={toast.id}
+          className={cn(
+            'fixed bottom-4 right-4 z-50 flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm shadow-lg text-white',
+            toast.tone === 'success' ? 'bg-[var(--color-positive)]' : 'bg-[var(--color-negative)]',
+          )}
+        >
+          <span>{toast.message}</span>
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="opacity-70 hover:opacity-100"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </output>
       ) : null}
     </div>
   );
