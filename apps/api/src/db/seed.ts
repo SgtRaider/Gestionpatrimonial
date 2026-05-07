@@ -10,6 +10,8 @@ import {
   accounts,
   categories,
   institutions,
+  loanRateHistory,
+  loans,
   recurringRules,
   transactionTags,
   transactions,
@@ -62,6 +64,11 @@ async function truncateAll() {
       transaction_tags,
       transaction_attachments,
       transactions,
+      loan_rate_history,
+      loan_amortization_schedule,
+      loan_prepayments,
+      loan_payments,
+      loans,
       recurring_rules,
       categorization_rules,
       categories,
@@ -73,6 +80,8 @@ async function truncateAll() {
     RESTART IDENTITY CASCADE
   `);
 }
+
+const MORTGAGE_ID = '01951b00-6000-7000-8000-000000000001';
 
 async function seed() {
   process.stdout.write('Truncating tables…\n');
@@ -210,6 +219,43 @@ async function seed() {
     process.stdout.write(`Inserting ${tagRows.length} transaction tags…\n`);
     await db.insert(transactionTags).values(tagRows);
   }
+
+  // Sample mortgage so the Deudas page has real content out of the box.
+  process.stdout.write('Inserting sample mortgage…\n');
+  const mortgageStart = '2020-04-15';
+  const nextReview = new Date();
+  nextReview.setMonth(nextReview.getMonth() + 1);
+  const nextReviewYmd = nextReview.toISOString().slice(0, 10);
+  await db.insert(loans).values({
+    id: MORTGAGE_ID,
+    userId: DEFAULT_USER_ID,
+    accountId: '01951b00-2000-7000-8000-000000000201', // BBVA cuenta nómina
+    kind: 'mortgage',
+    alias: 'Vivienda Cáceres',
+    lender: 'BBVA',
+    principalInitial: '197500.00',
+    currency: 'EUR',
+    startedAt: mortgageStart,
+    termMonths: 300,
+    amortizationSystem: 'french',
+    rateType: 'variable',
+    rateIndex: 'Euríbor 12M',
+    rateSpread: '0.99',
+    reviewFrequencyMonths: 12,
+    nextReviewAt: nextReviewYmd,
+    prepaymentFeePct: '0.5',
+    fiscalDeductible: false,
+    notes: 'Hipoteca primera vivienda',
+  });
+  await db.insert(loanRateHistory).values({
+    loanId: MORTGAGE_ID,
+    effectiveAt: mortgageStart,
+    rate: '3.52',
+    indexValueAtReview: '2.53',
+    spread: '0.99',
+    source: 'contract',
+    notes: 'Tipo inicial al firmar',
+  });
 
   process.stdout.write('Seed complete.\n');
 }

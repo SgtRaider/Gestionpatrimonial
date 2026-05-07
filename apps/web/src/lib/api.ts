@@ -9,6 +9,8 @@ import {
   type ImportCommitResponse,
   type ImportMapping,
   type ImportPreviewResponse,
+  type LoanDetail,
+  type LoanSummary,
   type TransactionListResponse,
   type TransactionPatch,
   accountWithInstitutionSchema,
@@ -18,6 +20,8 @@ import {
   dashboardSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
+  loanDetailSchema,
+  loanSummarySchema,
   transactionListResponseSchema,
 } from '@gp/shared';
 import { z } from 'zod';
@@ -108,6 +112,12 @@ export const api = {
 
   getCategories: (): Promise<Category[]> =>
     get('/api/categories', (raw) => z.array(categorySchema).parse(raw)),
+
+  getLoans: (): Promise<LoanSummary[]> =>
+    get('/api/loans', (raw) => z.array(loanSummarySchema).parse(raw)),
+
+  getLoan: (id: string): Promise<LoanDetail> =>
+    get(`/api/loans/${id}`, (raw) => loanDetailSchema.parse(raw)),
 
   patchTransaction: (id: string, patch: TransactionPatch) =>
     send('PATCH', `/api/transactions/${id}`, patch, (raw) =>
