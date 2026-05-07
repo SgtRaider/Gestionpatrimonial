@@ -1,5 +1,6 @@
 'use client';
 
+import { InvestVsAmortizeDialog } from '@/components/deudas/invest-vs-amortize-dialog';
 import { PrepaymentDialog } from '@/components/deudas/prepayment-dialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card, CardHeader } from '@/components/ui/card';
@@ -56,6 +57,7 @@ function Body({ loan }: { loan: LoanDetail }) {
     return Math.floor(focus / SCHEDULE_PAGE_SIZE);
   });
   const [showPrepayment, setShowPrepayment] = useState(false);
+  const [showInvestCompare, setShowInvestCompare] = useState(false);
 
   const principalInitial = Number(loan.principalInitial);
   const outstandingNow = Number(loan.outstanding);
@@ -84,6 +86,13 @@ function Body({ loan }: { loan: LoanDetail }) {
               className="text-sm px-3 py-1.5 rounded bg-[var(--color-accent)] text-white"
             >
               💰 Simular amortización
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowInvestCompare(true)}
+              className="text-sm px-3 py-1.5 rounded border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
+            >
+              ⚖ ¿Amortizar o invertir?
             </button>
             <Link
               href="/deudas"
@@ -272,6 +281,9 @@ function Body({ loan }: { loan: LoanDetail }) {
 
       {showPrepayment ? (
         <PrepaymentDialog loan={loan} onClose={() => setShowPrepayment(false)} />
+      ) : null}
+      {showInvestCompare ? (
+        <InvestVsAmortizeDialog loan={loan} onClose={() => setShowInvestCompare(false)} />
       ) : null}
     </div>
   );
