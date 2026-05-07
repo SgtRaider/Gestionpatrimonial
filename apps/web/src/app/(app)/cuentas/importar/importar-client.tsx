@@ -40,6 +40,7 @@ export function ImportarClient() {
     inserted: number;
     duplicates: number;
     skipped: number;
+    autoCategorized: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -375,6 +376,11 @@ export function ImportarClient() {
                 </>
               ) : null}
             </p>
+            {commitResult.autoCategorized > 0 ? (
+              <p className="text-xs text-[var(--color-positive)]">
+                🏷 {commitResult.autoCategorized} auto-categorizados por reglas existentes
+              </p>
+            ) : null}
           </div>
           <div className="flex justify-center gap-2">
             <button

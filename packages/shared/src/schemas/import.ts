@@ -74,6 +74,8 @@ export const importCommitResponseSchema = z.object({
   inserted: z.number().int().nonnegative(),
   duplicates: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
+  // Of the inserted rows, how many were auto-categorized by an active rule.
+  autoCategorized: z.number().int().nonnegative().default(0),
   format: importFormatSchema.optional(),
 });
 export type ImportCommitResponse = z.infer<typeof importCommitResponseSchema>;

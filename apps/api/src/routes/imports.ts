@@ -7,12 +7,12 @@ import {
   importMappingSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { accounts, transactions } from '../db/schema.js';
+import { accounts, categorizationRules, transactions } from '../db/schema.js';
 import { parseFile } from '../imports/format.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
@@ -168,7 +168,13 @@ export const importsRoutes: FastifyPluginAsync = async (app) => {
     const skipped = result.rows.length - valid.length;
 
     if (valid.length === 0) {
-      return { inserted: 0, duplicates: 0, skipped, format: result.format };
+      return {
+        inserted: 0,
+        duplicates: 0,
+        skipped,
+        autoCategorized: 0,
+        format: result.format,
+      };
     }
 
     const importSource = `${result.format}:${fileName ?? 'unknown'}`;
@@ -202,10 +208,57 @@ export const importsRoutes: FastifyPluginAsync = async (app) => {
       .onConflictDoNothing({ target: [transactions.accountId, transactions.externalId] })
       .returning({ id: transactions.id });
 
+    // Apply active categorization rules in priority order against the rows we
+    // just inserted. Same Postgres `~*` regex semantics as the rules POST
+    // endpoint, so behaviour stays consistent. First-rule-wins via the
+    // `category_id IS NULL` guard on each successive UPDATE.
+    let autoCategorized = 0;
+    if (inserted.length > 0) {
+      const insertedIds = inserted.map((r) => r.id);
+      const rules = await db
+        .select({
+          id: categorizationRules.id,
+          patternRegex: categorizationRules.patternRegex,
+          accountId: categorizationRules.accountId,
+          amountMin: categorizationRules.amountMin,
+          amountMax: categorizationRules.amountMax,
+          categoryId: categorizationRules.categoryId,
+        })
+        .from(categorizationRules)
+        .where(
+          and(
+            eq(categorizationRules.userId, DEFAULT_USER_ID),
+            eq(categorizationRules.active, true),
+            isNull(categorizationRules.deletedAt),
+          ),
+        )
+        .orderBy(asc(categorizationRules.priority));
+
+      for (const rule of rules) {
+        const conditions = [
+          inArray(transactions.id, insertedIds),
+          eq(transactions.userId, DEFAULT_USER_ID),
+          isNull(transactions.categoryId),
+          sql`${transactions.descriptionRaw} ~* ${rule.patternRegex}`,
+        ];
+        if (rule.accountId) conditions.push(eq(transactions.accountId, rule.accountId));
+        if (rule.amountMin) conditions.push(gte(transactions.amount, rule.amountMin));
+        if (rule.amountMax) conditions.push(lte(transactions.amount, rule.amountMax));
+
+        const updated = await db
+          .update(transactions)
+          .set({ categoryId: rule.categoryId, updatedAt: new Date() })
+          .where(and(...conditions))
+          .returning({ id: transactions.id });
+        autoCategorized += updated.length;
+      }
+    }
+
     return {
       inserted: inserted.length,
       duplicates: values.length - inserted.length,
       skipped,
+      autoCategorized,
       format: result.format,
     };
   });
