@@ -30,6 +30,9 @@ export type ParseResult = {
     headers: string[];
     detectedMapping: ImportMapping;
   };
+  // Raw text the parser saw, surfaced for debugging when the format detector
+  // misses or the parser produces 0 rows. Populated only for PDFs.
+  debugText?: string;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -391,7 +394,9 @@ export async function parseFile(
       const mi = parseMyInvestorPdf(text);
       rows = mi.length > cre.length ? mi : cre;
     }
-    return { format, label: FORMAT_LABELS[format], rows };
+    // Truncated raw text helps diagnose layouts pdfjs renders unexpectedly.
+    const debugText = text.slice(0, 4000);
+    return { format, label: FORMAT_LABELS[format], rows, debugText };
   }
 
   // CSV path

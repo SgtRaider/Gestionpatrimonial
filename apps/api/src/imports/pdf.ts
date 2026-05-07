@@ -1,8 +1,16 @@
 import type { Buffer } from 'node:buffer';
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-// Extracts plain text from a PDF buffer. We join text fragments with spaces and
-// pages with double newlines so per-line regex matchers have stable input.
+type TextItem = { x: number; y: number; str: string };
+
+const Y_TOLERANCE = 2;
+
+// Extracts plain text from a PDF buffer. pdfjs returns text fragments in
+// document writing order, which is NOT necessarily top-to-bottom. We collect
+// every fragment with its (x, y) coords, sort by Y desc → X asc, then group
+// fragments whose Y values are within Y_TOLERANCE into the same line. This
+// keeps tabular layouts (bank statements) coherent line-by-line for the
+// downstream regex / token parsers.
 export async function extractPdfText(buffer: Buffer): Promise<string> {
   const data = new Uint8Array(buffer);
   const loadingTask = getDocument({
@@ -17,21 +25,36 @@ export async function extractPdfText(buffer: Buffer): Promise<string> {
     for (let i = 1; i <= doc.numPages; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
-      let lastY: number | null = null;
-      const lineParts: string[] = [];
-      const lines: string[] = [];
+      const items: TextItem[] = [];
       for (const item of content.items) {
         if (!('str' in item)) continue;
-        const y = 'transform' in item && item.transform ? item.transform[5] : null;
-        if (lastY !== null && y !== null && Math.abs((y as number) - lastY) > 2) {
-          if (lineParts.length) lines.push(lineParts.join(' '));
-          lineParts.length = 0;
-        }
-        lineParts.push(item.str);
-        if (typeof y === 'number') lastY = y;
+        const str = (item as { str: string }).str;
+        if (!str) continue;
+        const transform = (item as { transform?: number[] }).transform;
+        if (!transform || transform.length < 6) continue;
+        const x = transform[4];
+        const y = transform[5];
+        if (typeof x !== 'number' || typeof y !== 'number') continue;
+        items.push({ x, y, str });
       }
-      if (lineParts.length) lines.push(lineParts.join(' '));
-      pages.push(lines.join('\n'));
+      items.sort((a, b) => b.y - a.y || a.x - b.x);
+
+      const lines: string[] = [];
+      let currentLine: string[] = [];
+      let currentY: number | null = null;
+      for (const it of items) {
+        if (currentY === null || Math.abs(it.y - currentY) <= Y_TOLERANCE) {
+          currentLine.push(it.str);
+          if (currentY === null) currentY = it.y;
+        } else {
+          if (currentLine.length) lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+          currentLine = [it.str];
+          currentY = it.y;
+        }
+      }
+      if (currentLine.length) lines.push(currentLine.join(' ').replace(/\s+/g, ' ').trim());
+
+      pages.push(lines.filter(Boolean).join('\n'));
       page.cleanup();
     }
   } finally {

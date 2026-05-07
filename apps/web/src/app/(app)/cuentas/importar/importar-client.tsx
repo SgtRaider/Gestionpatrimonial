@@ -315,6 +315,17 @@ export function ImportarClient() {
               </div>
             </div>
 
+            {preview.stats.parsedRows === 0 && preview.debugText ? (
+              <details className="border border-dashed border-[var(--color-warning)]/40 rounded p-3 bg-[var(--color-warning)]/5">
+                <summary className="text-xs font-medium cursor-pointer text-[var(--color-warning)]">
+                  ⚠ 0 filas reconocidas — texto que vio el parser (click para ver)
+                </summary>
+                <pre className="text-[10px] mt-2 overflow-auto max-h-72 whitespace-pre-wrap font-mono">
+                  {preview.debugText}
+                </pre>
+              </details>
+            ) : null}
+
             <div className="flex justify-between">
               <button
                 type="button"

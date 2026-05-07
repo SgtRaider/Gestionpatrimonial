@@ -133,6 +133,7 @@ export const importsRoutes: FastifyPluginAsync = async (app) => {
       stats,
       format: result.format,
       formatLabel: result.label,
+      ...(result.debugText ? { debugText: result.debugText } : {}),
     };
     return response;
   });

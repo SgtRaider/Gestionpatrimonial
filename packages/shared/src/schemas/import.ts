@@ -64,6 +64,9 @@ export const importPreviewResponseSchema = z.object({
   stats: importPreviewStatsSchema,
   format: importFormatSchema,
   formatLabel: z.string(),
+  // Truncated raw text the parser saw — populated for PDFs to help diagnose
+  // detection / parsing issues directly from the UI.
+  debugText: z.string().optional(),
 });
 export type ImportPreviewResponse = z.infer<typeof importPreviewResponseSchema>;
 
