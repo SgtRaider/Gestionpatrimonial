@@ -28,33 +28,16 @@ export type InstitutionType = z.infer<typeof institutionTypeSchema>;
 export const transactionStatusSchema = z.enum(['booked', 'pending']);
 export type TransactionStatus = z.infer<typeof transactionStatusSchema>;
 
-export const transactionSourceSchema = z.enum([
-  'psd2',
-  'csv',
-  'scrape',
-  'manual',
-  'derived',
-]);
+export const transactionSourceSchema = z.enum(['psd2', 'csv', 'scrape', 'manual', 'derived']);
 export type TransactionSource = z.infer<typeof transactionSourceSchema>;
 
 export const categoryKindSchema = z.enum(['expense', 'income', 'transfer']);
 export type CategoryKind = z.infer<typeof categoryKindSchema>;
 
-export const loanKindSchema = z.enum([
-  'mortgage',
-  'personal',
-  'car',
-  'student',
-  'other',
-]);
+export const loanKindSchema = z.enum(['mortgage', 'personal', 'car', 'student', 'other']);
 export type LoanKind = z.infer<typeof loanKindSchema>;
 
-export const amortizationSystemSchema = z.enum([
-  'french',
-  'german',
-  'american',
-  'bullet',
-]);
+export const amortizationSystemSchema = z.enum(['french', 'german', 'american', 'bullet']);
 export type AmortizationSystem = z.infer<typeof amortizationSystemSchema>;
 
 export const rateTypeSchema = z.enum(['fixed', 'variable', 'mixed']);

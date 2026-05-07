@@ -14,8 +14,10 @@ const configSchema = z.object({
 
 const parsed = configSchema.safeParse(process.env);
 if (!parsed.success) {
-  // biome-ignore lint/suspicious/noConsoleLog: bootstrap-time error reporting before logger exists
-  console.error('Invalid environment variables:', parsed.error.flatten().fieldErrors);
+  // Bootstrap-time error reporting before the logger plugin is registered.
+  process.stderr.write(
+    `Invalid environment variables: ${JSON.stringify(parsed.error.flatten().fieldErrors)}\n`,
+  );
   process.exit(1);
 }
 

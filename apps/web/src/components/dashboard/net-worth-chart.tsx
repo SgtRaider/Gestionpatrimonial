@@ -1,5 +1,7 @@
 'use client';
 
+import { Card, CardHeader } from '@/components/ui/card';
+import { formatEur } from '@/lib/format';
 import type { NetWorthPoint } from '@gp/shared';
 import { useState } from 'react';
 import {
@@ -14,8 +16,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Card, CardHeader } from '@/components/ui/card';
-import { formatEur } from '@/lib/format';
 
 type Mode = 'net' | 'detailed' | 'stacked';
 
@@ -105,10 +105,7 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
                 tick={{ fontSize: 11 }}
                 stroke="var(--color-muted)"
               />
-              <Tooltip
-                formatter={tooltipFormatter}
-                labelFormatter={(l) => formatMonthShort(l)}
-              />
+              <Tooltip formatter={tooltipFormatter} labelFormatter={(l) => formatMonthShort(l)} />
               <Area
                 type="monotone"
                 dataKey="netWorth"
@@ -131,10 +128,7 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
                 tick={{ fontSize: 11 }}
                 stroke="var(--color-muted)"
               />
-              <Tooltip
-                formatter={tooltipFormatter}
-                labelFormatter={(l) => formatMonthShort(l)}
-              />
+              <Tooltip formatter={tooltipFormatter} labelFormatter={(l) => formatMonthShort(l)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Line
                 type="monotone"
@@ -175,10 +169,7 @@ export function NetWorthChart({ data }: { data: NetWorthPoint[] }) {
                 tick={{ fontSize: 11 }}
                 stroke="var(--color-muted)"
               />
-              <Tooltip
-                formatter={tooltipFormatter}
-                labelFormatter={(l) => formatMonthShort(l)}
-              />
+              <Tooltip formatter={tooltipFormatter} labelFormatter={(l) => formatMonthShort(l)} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Area
                 type="monotone"

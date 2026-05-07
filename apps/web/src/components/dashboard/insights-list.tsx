@@ -1,6 +1,6 @@
-import type { DashboardInsight } from '@gp/shared';
 import { Card, CardHeader } from '@/components/ui/card';
 import { formatEur } from '@/lib/format';
+import type { DashboardInsight } from '@gp/shared';
 
 const KIND_ICON: Record<string, string> = {
   unused_subscription: '📺',
@@ -19,9 +19,7 @@ export function InsightsList({ insights }: { insights: DashboardInsight[] }) {
     <Card className="lg:col-span-2">
       <CardHeader title="Insights destacados" />
       {insights.length === 0 ? (
-        <p className="text-xs text-[var(--color-muted)] py-3">
-          No hay insights nuevos. Sigue así.
-        </p>
+        <p className="text-xs text-[var(--color-muted)] py-3">No hay insights nuevos. Sigue así.</p>
       ) : (
         <ul className="space-y-3">
           {insights.map((i) => (
@@ -29,15 +27,11 @@ export function InsightsList({ insights }: { insights: DashboardInsight[] }) {
               key={i.id}
               className="flex items-start gap-3 border-b border-[var(--color-border)] last:border-0 pb-3 last:pb-0"
             >
-              <span className="text-lg leading-tight">
-                {KIND_ICON[i.kind] ?? '💡'}
-              </span>
+              <span className="text-lg leading-tight">{KIND_ICON[i.kind] ?? '💡'}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium">{i.title}</div>
                 {i.description ? (
-                  <div className="text-xs text-[var(--color-muted)] mt-0.5">
-                    {i.description}
-                  </div>
+                  <div className="text-xs text-[var(--color-muted)] mt-0.5">{i.description}</div>
                 ) : null}
                 {i.estimatedSavings ? (
                   <div className="text-xs text-[var(--color-positive)] mt-1 tabular-nums">

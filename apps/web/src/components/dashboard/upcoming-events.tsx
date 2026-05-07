@@ -1,7 +1,7 @@
-import type { UpcomingEvent } from '@gp/shared';
 import { Card, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
 import { formatDelta, isPositive } from '@/lib/format';
+import type { UpcomingEvent } from '@gp/shared';
 
 const KIND_ICON: Record<UpcomingEvent['kind'], string> = {
   loan_payment: '🏦',
@@ -43,9 +43,7 @@ export function UpcomingEvents({ events }: { events: UpcomingEvent[] }) {
               <div
                 className={cn(
                   'tabular-nums text-sm font-medium',
-                  isPositive(e.amount)
-                    ? 'text-[var(--color-positive)]'
-                    : 'text-[var(--color-fg)]',
+                  isPositive(e.amount) ? 'text-[var(--color-positive)]' : 'text-[var(--color-fg)]',
                 )}
               >
                 {formatDelta(e.amount)}

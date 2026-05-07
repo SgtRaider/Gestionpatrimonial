@@ -1,6 +1,6 @@
-import type { AttentionAlert } from '@gp/shared';
 import { Card, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/cn';
+import type { AttentionAlert } from '@gp/shared';
 
 const SEVERITY_DOT: Record<AttentionAlert['severity'], string> = {
   info: 'bg-blue-500',
@@ -11,11 +11,7 @@ const SEVERITY_DOT: Record<AttentionAlert['severity'], string> = {
 export function AttentionBlock({ alerts }: { alerts: AttentionAlert[] }) {
   const empty = alerts.length === 0;
   return (
-    <Card
-      className={cn(
-        empty && 'border-[var(--color-positive)]/40 bg-[var(--color-positive)]/5',
-      )}
-    >
+    <Card className={cn(empty && 'border-[var(--color-positive)]/40 bg-[var(--color-positive)]/5')}>
       <CardHeader title="Atención" />
       {empty ? (
         <p className="text-sm text-[var(--color-positive)] flex items-center gap-2">

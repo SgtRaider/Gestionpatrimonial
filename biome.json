@@ -7,13 +7,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "ignore": [
-      "**/dist/**",
-      "**/.next/**",
-      "**/node_modules/**",
-      "**/drizzle/**",
-      "**/coverage/**"
-    ]
+    "ignore": ["**/dist/**", "**/.next/**", "**/node_modules/**", "**/drizzle/**", "**/coverage/**"]
   },
   "formatter": {
     "enabled": true,

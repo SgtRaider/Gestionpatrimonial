@@ -6,8 +6,7 @@ import * as schema from './schema.js';
 const { Pool } = pg;
 
 const connectionString =
-  process.env.DATABASE_URL ??
-  'postgres://gp_user:gp_password@localhost:5432/gestionpatrimonial';
+  process.env.DATABASE_URL ?? 'postgres://gp_user:gp_password@localhost:5432/gestionpatrimonial';
 
 export const pool = new Pool({ connectionString });
 

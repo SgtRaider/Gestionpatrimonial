@@ -1,9 +1,9 @@
 'use client';
 
-import type { Distribution } from '@gp/shared';
-import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 import { Card, CardHeader } from '@/components/ui/card';
 import { formatEur } from '@/lib/format';
+import type { Distribution } from '@gp/shared';
+import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
 
 const SLICE_COLORS = {
   liquid: '#3b82f6',
@@ -22,9 +22,7 @@ const SLICE_LABELS = {
 export function DistributionDonut({ distribution }: { distribution: Distribution }) {
   const liabilities = Number(distribution.liabilities);
 
-  const slices = (
-    ['liquid', 'invested', 'realEstate', 'other'] as const
-  ).map((key) => ({
+  const slices = (['liquid', 'invested', 'realEstate', 'other'] as const).map((key) => ({
     key,
     name: SLICE_LABELS[key],
     value: Number(distribution[key]),
@@ -58,9 +56,7 @@ export function DistributionDonut({ distribution }: { distribution: Distribution
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-          <div className="text-xs text-[var(--color-muted)] uppercase tracking-wide">
-            Neto
-          </div>
+          <div className="text-xs text-[var(--color-muted)] uppercase tracking-wide">Neto</div>
           <div className="text-xl font-semibold tabular-nums">
             {formatEur(netWorth, { compact: true })}
           </div>
@@ -72,10 +68,7 @@ export function DistributionDonut({ distribution }: { distribution: Distribution
           return (
             <div key={s.key} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
-                <span
-                  className="w-2.5 h-2.5 rounded-full"
-                  style={{ background: s.color }}
-                />
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: s.color }} />
                 <span>{s.name}</span>
               </div>
               <div className="text-[var(--color-muted)] tabular-nums">

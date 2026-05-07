@@ -1,6 +1,5 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { AttentionBlock } from '@/components/dashboard/attention-block';
 import { CashFlowChart } from '@/components/dashboard/cash-flow-chart';
 import { DistributionDonut } from '@/components/dashboard/distribution-donut';
@@ -14,6 +13,7 @@ import {
 import { NetWorthChart } from '@/components/dashboard/net-worth-chart';
 import { UpcomingEvents } from '@/components/dashboard/upcoming-events';
 import { api } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
 
 export function DashboardClient() {
   const { data, isLoading, isError, error } = useQuery({
@@ -22,9 +22,7 @@ export function DashboardClient() {
   });
 
   if (isLoading) {
-    return (
-      <div className="p-8 text-center text-[var(--color-muted)]">Cargando…</div>
-    );
+    return <div className="p-8 text-center text-[var(--color-muted)]">Cargando…</div>;
   }
 
   if (isError || !data) {

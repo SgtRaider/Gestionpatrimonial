@@ -1,11 +1,7 @@
-import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/cn';
+import type { HTMLAttributes, ReactNode } from 'react';
 
-export function Card({
-  className,
-  children,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
+export function Card({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
@@ -35,9 +31,7 @@ export function CardHeader({
         <h3 className="text-xs uppercase tracking-wide text-[var(--color-muted)] font-medium">
           {title}
         </h3>
-        {subtitle ? (
-          <p className="text-xs text-[var(--color-muted)] mt-0.5">{subtitle}</p>
-        ) : null}
+        {subtitle ? <p className="text-xs text-[var(--color-muted)] mt-0.5">{subtitle}</p> : null}
       </div>
       {action ? <div>{action}</div> : null}
     </div>

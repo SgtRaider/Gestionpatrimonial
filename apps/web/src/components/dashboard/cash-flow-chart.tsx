@@ -1,5 +1,7 @@
 'use client';
 
+import { Card, CardHeader } from '@/components/ui/card';
+import { formatEur } from '@/lib/format';
 import type { CashFlowMonth } from '@gp/shared';
 import {
   Bar,
@@ -13,8 +15,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import { Card, CardHeader } from '@/components/ui/card';
-import { formatEur } from '@/lib/format';
 
 function formatMonth(month: string): string {
   const [y, m] = month.split('-');
@@ -32,9 +32,7 @@ export function CashFlowChart({ data }: { data: CashFlowMonth[] }) {
   }));
 
   const median6m =
-    chartData.length >= 6
-      ? chartData.slice(-6).reduce((acc, p) => acc + p.net, 0) / 6
-      : 0;
+    chartData.length >= 6 ? chartData.slice(-6).reduce((acc, p) => acc + p.net, 0) / 6 : 0;
 
   return (
     <Card className="lg:col-span-2">
@@ -57,10 +55,7 @@ export function CashFlowChart({ data }: { data: CashFlowMonth[] }) {
               tick={{ fontSize: 11 }}
               stroke="var(--color-muted)"
             />
-            <Tooltip
-              formatter={(v: number) => formatEur(v)}
-              labelFormatter={formatMonth}
-            />
+            <Tooltip formatter={(v: number) => formatEur(v)} labelFormatter={formatMonth} />
             <Legend wrapperStyle={{ fontSize: 12 }} />
             <ReferenceLine y={0} stroke="var(--color-border)" />
             <ReferenceLine

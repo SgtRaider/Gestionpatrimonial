@@ -32,11 +32,12 @@ import { v7 as uuidv7 } from 'uuid';
 //               queryable. Junction tables CASCADE.
 // =============================================================================
 
-const id = () => uuid('id').primaryKey().$defaultFn(() => uuidv7());
-const createdAt = () =>
-  timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
-const updatedAt = () =>
-  timestamp('updated_at', { withTimezone: true }).defaultNow().notNull();
+const id = () =>
+  uuid('id')
+    .primaryKey()
+    .$defaultFn(() => uuidv7());
+const createdAt = () => timestamp('created_at', { withTimezone: true }).defaultNow().notNull();
+const updatedAt = () => timestamp('updated_at', { withTimezone: true }).defaultNow().notNull();
 const deletedAt = () => timestamp('deleted_at', { withTimezone: true });
 
 const money = (name: string) => numeric(name, { precision: 15, scale: 2 });
@@ -67,10 +68,7 @@ export const institutionTypeEnum = pgEnum('institution_type', [
   'manual',
 ]);
 
-export const transactionStatusEnum = pgEnum('transaction_status', [
-  'booked',
-  'pending',
-]);
+export const transactionStatusEnum = pgEnum('transaction_status', ['booked', 'pending']);
 
 export const transactionSourceEnum = pgEnum('transaction_source', [
   'psd2',
@@ -80,11 +78,7 @@ export const transactionSourceEnum = pgEnum('transaction_source', [
   'derived',
 ]);
 
-export const categoryKindEnum = pgEnum('category_kind', [
-  'expense',
-  'income',
-  'transfer',
-]);
+export const categoryKindEnum = pgEnum('category_kind', ['expense', 'income', 'transfer']);
 
 export const holdingTransactionKindEnum = pgEnum('holding_transaction_kind', [
   'buy',
@@ -114,16 +108,9 @@ export const amortizationSystemEnum = pgEnum('amortization_system', [
 
 export const rateTypeEnum = pgEnum('rate_type', ['fixed', 'variable', 'mixed']);
 
-export const rateSourceEnum = pgEnum('rate_source', [
-  'contract',
-  'review',
-  'novation',
-]);
+export const rateSourceEnum = pgEnum('rate_source', ['contract', 'review', 'novation']);
 
-export const prepaymentModeEnum = pgEnum('prepayment_mode', [
-  'reduce_term',
-  'reduce_payment',
-]);
+export const prepaymentModeEnum = pgEnum('prepayment_mode', ['reduce_term', 'reduce_payment']);
 
 export const recurringKindEnum = pgEnum('recurring_kind', [
   'subscription',
@@ -143,11 +130,7 @@ export const recurringFrequencyEnum = pgEnum('recurring_frequency', [
   'custom',
 ]);
 
-export const recurringStatusEnum = pgEnum('recurring_status', [
-  'active',
-  'paused',
-  'cancelled',
-]);
+export const recurringStatusEnum = pgEnum('recurring_status', ['active', 'paused', 'cancelled']);
 
 export const plannedEventKindEnum = pgEnum('planned_event_kind', [
   'expense',
@@ -160,12 +143,7 @@ export const plannedEventKindEnum = pgEnum('planned_event_kind', [
   'life_event',
 ]);
 
-export const certaintyEnum = pgEnum('certainty', [
-  'low',
-  'medium',
-  'high',
-  'certain',
-]);
+export const certaintyEnum = pgEnum('certainty', ['low', 'medium', 'high', 'certain']);
 
 export const plannedEventStatusEnum = pgEnum('planned_event_status', [
   'planned',
@@ -174,11 +152,7 @@ export const plannedEventStatusEnum = pgEnum('planned_event_status', [
   'cancelled',
 ]);
 
-export const goalStatusEnum = pgEnum('goal_status', [
-  'active',
-  'achieved',
-  'abandoned',
-]);
+export const goalStatusEnum = pgEnum('goal_status', ['active', 'achieved', 'abandoned']);
 
 export const insightKindEnum = pgEnum('insight_kind', [
   'unused_subscription',
@@ -192,11 +166,7 @@ export const insightKindEnum = pgEnum('insight_kind', [
   'other',
 ]);
 
-export const insightSeverityEnum = pgEnum('insight_severity', [
-  'info',
-  'warning',
-  'urgent',
-]);
+export const insightSeverityEnum = pgEnum('insight_severity', ['info', 'warning', 'urgent']);
 
 // =============================================================================
 // IDENTITY
@@ -222,9 +192,7 @@ export const userSettings = pgTable('user_settings', {
   fiscalYearStartMonth: integer('fiscal_year_start_month').default(1).notNull(),
   locale: varchar('locale', { length: 10 }).default('es-ES').notNull(),
   timezone: varchar('timezone', { length: 50 }).default('Europe/Madrid').notNull(),
-  expectedPortfolioReturnDefault: pct('expected_portfolio_return_default')
-    .default('6.5')
-    .notNull(),
+  expectedPortfolioReturnDefault: pct('expected_portfolio_return_default').default('6.5').notNull(),
   largeExpenseThreshold: money('large_expense_threshold').default('200').notNull(),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
@@ -246,11 +214,7 @@ export const fxRates = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    fxUnique: uniqueIndex('fx_rates_unique').on(
-      t.fromCurrency,
-      t.toCurrency,
-      t.valuationDate,
-    ),
+    fxUnique: uniqueIndex('fx_rates_unique').on(t.fromCurrency, t.toCurrency, t.valuationDate),
     fxDateIdx: index('fx_rates_date_idx').on(t.valuationDate.desc()),
   }),
 );
@@ -322,10 +286,7 @@ export const balances = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    balancesAccountIdx: index('balances_account_idx').on(
-      t.accountId,
-      t.snapshotAt.desc(),
-    ),
+    balancesAccountIdx: index('balances_account_idx').on(t.accountId, t.snapshotAt.desc()),
     balancesUnique: uniqueIndex('balances_unique').on(t.accountId, t.snapshotAt),
   }),
 );
@@ -380,10 +341,7 @@ export const categorizationRules = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    rulesUserPriorityIdx: index('categorization_rules_user_priority_idx').on(
-      t.userId,
-      t.priority,
-    ),
+    rulesUserPriorityIdx: index('categorization_rules_user_priority_idx').on(t.userId, t.priority),
   }),
 );
 
@@ -408,9 +366,7 @@ export const recurringRules = pgTable(
     categoryId: uuid('category_id').references(() => categories.id),
     accountId: uuid('account_id').references(() => accounts.id),
     status: recurringStatusEnum('status').default('active').notNull(),
-    detectedAutomatically: boolean('detected_automatically')
-      .default(false)
-      .notNull(),
+    detectedAutomatically: boolean('detected_automatically').default(false).notNull(),
     confidence: pct('confidence'),
     notes: text('notes'),
     createdAt: createdAt(),
@@ -418,10 +374,7 @@ export const recurringRules = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    recurringUserStatusIdx: index('recurring_user_status_idx').on(
-      t.userId,
-      t.status,
-    ),
+    recurringUserStatusIdx: index('recurring_user_status_idx').on(t.userId, t.status),
     recurringNextIdx: index('recurring_next_idx').on(t.nextExpectedAt),
   }),
 );
@@ -454,9 +407,7 @@ export const transactions = pgTable(
     parentTransactionId: uuid('parent_transaction_id').references(
       (): AnyPgColumn => transactions.id,
     ),
-    recurringRuleId: uuid('recurring_rule_id').references(
-      () => recurringRules.id,
-    ),
+    recurringRuleId: uuid('recurring_rule_id').references(() => recurringRules.id),
     notes: text('notes'),
     isProjection: boolean('is_projection').default(false).notNull(),
     createdAt: createdAt(),
@@ -464,22 +415,11 @@ export const transactions = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    txUserBookedIdx: index('transactions_user_booked_idx').on(
-      t.userId,
-      t.bookedAt.desc(),
-    ),
-    txAccountBookedIdx: index('transactions_account_booked_idx').on(
-      t.accountId,
-      t.bookedAt.desc(),
-    ),
+    txUserBookedIdx: index('transactions_user_booked_idx').on(t.userId, t.bookedAt.desc()),
+    txAccountBookedIdx: index('transactions_account_booked_idx').on(t.accountId, t.bookedAt.desc()),
     txCategoryIdx: index('transactions_category_idx').on(t.categoryId),
-    txTransferPairIdx: index('transactions_transfer_pair_idx').on(
-      t.transferPairId,
-    ),
-    txExternalUnique: uniqueIndex('transactions_external_unique').on(
-      t.accountId,
-      t.externalId,
-    ),
+    txTransferPairIdx: index('transactions_transfer_pair_idx').on(t.transferPairId),
+    txExternalUnique: uniqueIndex('transactions_external_unique').on(t.accountId, t.externalId),
   }),
 );
 
@@ -584,10 +524,7 @@ export const holdingValuations = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    valuationsUnique: uniqueIndex('holding_valuations_unique').on(
-      t.holdingId,
-      t.valuationAt,
-    ),
+    valuationsUnique: uniqueIndex('holding_valuations_unique').on(t.holdingId, t.valuationAt),
   }),
 );
 
@@ -612,13 +549,8 @@ export const holdingTransactions = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    holdingTxHoldingIdx: index('holding_tx_holding_idx').on(
-      t.holdingId,
-      t.occurredAt.desc(),
-    ),
-    holdingTxFiscalGroupIdx: index('holding_tx_fiscal_group_idx').on(
-      t.fiscalEventGroupId,
-    ),
+    holdingTxHoldingIdx: index('holding_tx_holding_idx').on(t.holdingId, t.occurredAt.desc()),
+    holdingTxFiscalGroupIdx: index('holding_tx_fiscal_group_idx').on(t.fiscalEventGroupId),
   }),
 );
 
@@ -661,9 +593,7 @@ export const loans = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     accountId: uuid('account_id').references(() => accounts.id),
-    linkedAssetAccountId: uuid('linked_asset_account_id').references(
-      () => accounts.id,
-    ),
+    linkedAssetAccountId: uuid('linked_asset_account_id').references(() => accounts.id),
     kind: loanKindEnum('kind').notNull(),
     alias: varchar('alias', { length: 100 }),
     lender: varchar('lender', { length: 100 }).notNull(),
@@ -671,9 +601,7 @@ export const loans = pgTable(
     currency: varchar('currency', { length: 3 }).default('EUR').notNull(),
     startedAt: date('started_at').notNull(),
     termMonths: integer('term_months').notNull(),
-    amortizationSystem: amortizationSystemEnum('amortization_system')
-      .default('french')
-      .notNull(),
+    amortizationSystem: amortizationSystemEnum('amortization_system').default('french').notNull(),
     rateType: rateTypeEnum('rate_type').notNull(),
     rateFixed: pct('rate_fixed'),
     rateIndex: varchar('rate_index', { length: 50 }),
@@ -709,10 +637,7 @@ export const loanRateHistory = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    rateHistoryLoanIdx: index('loan_rate_history_loan_idx').on(
-      t.loanId,
-      t.effectiveAt.desc(),
-    ),
+    rateHistoryLoanIdx: index('loan_rate_history_loan_idx').on(t.loanId, t.effectiveAt.desc()),
   }),
 );
 
@@ -735,10 +660,7 @@ export const loanAmortizationSchedule = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    scheduleLoanPeriodUnique: uniqueIndex('schedule_loan_period_unique').on(
-      t.loanId,
-      t.period,
-    ),
+    scheduleLoanPeriodUnique: uniqueIndex('schedule_loan_period_unique').on(t.loanId, t.period),
     scheduleLoanDueIdx: index('schedule_loan_due_idx').on(t.loanId, t.dueAt),
   }),
 );
@@ -761,10 +683,7 @@ export const loanPrepayments = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    prepaymentsLoanIdx: index('prepayments_loan_idx').on(
-      t.loanId,
-      t.occurredAt.desc(),
-    ),
+    prepaymentsLoanIdx: index('prepayments_loan_idx').on(t.loanId, t.occurredAt.desc()),
   }),
 );
 
@@ -845,10 +764,7 @@ export const plannedEvents = pgTable(
     deletedAt: deletedAt(),
   },
   (t) => ({
-    plannedUserScheduledIdx: index('planned_user_scheduled_idx').on(
-      t.userId,
-      t.scheduledAt,
-    ),
+    plannedUserScheduledIdx: index('planned_user_scheduled_idx').on(t.userId, t.scheduledAt),
     plannedStatusIdx: index('planned_status_idx').on(t.status),
   }),
 );
@@ -862,9 +778,7 @@ export const scenarios = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     name: varchar('name', { length: 200 }).notNull(),
     description: text('description'),
-    baseScenarioId: uuid('base_scenario_id').references(
-      (): AnyPgColumn => scenarios.id,
-    ),
+    baseScenarioId: uuid('base_scenario_id').references((): AnyPgColumn => scenarios.id),
     modifications: jsonb('modifications'),
     isDefault: boolean('is_default').default(false).notNull(),
     createdAt: createdAt(),
@@ -891,10 +805,7 @@ export const forecastRuns = pgTable(
     createdAt: createdAt(),
   },
   (t) => ({
-    forecastUserRunIdx: index('forecast_user_run_idx').on(
-      t.userId,
-      t.runAt.desc(),
-    ),
+    forecastUserRunIdx: index('forecast_user_run_idx').on(t.userId, t.runAt.desc()),
   }),
 );
 
@@ -922,11 +833,7 @@ export const insights = pgTable(
     updatedAt: updatedAt(),
   },
   (t) => ({
-    insightsUserActiveIdx: index('insights_user_active_idx').on(
-      t.userId,
-      t.dismissedAt,
-      t.actedAt,
-    ),
+    insightsUserActiveIdx: index('insights_user_active_idx').on(t.userId, t.dismissedAt, t.actedAt),
     insightsKindIdx: index('insights_kind_idx').on(t.kind),
   }),
 );
@@ -940,9 +847,7 @@ export const auditLog = pgTable(
   {
     id: id(),
     userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
-    occurredAt: timestamp('occurred_at', { withTimezone: true })
-      .defaultNow()
-      .notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).defaultNow().notNull(),
     entity: varchar('entity', { length: 50 }).notNull(),
     entityId: uuid('entity_id'),
     action: varchar('action', { length: 50 }).notNull(),
@@ -953,10 +858,7 @@ export const auditLog = pgTable(
   },
   (t) => ({
     auditEntityIdx: index('audit_entity_idx').on(t.entity, t.entityId),
-    auditUserOccurredIdx: index('audit_user_occurred_idx').on(
-      t.userId,
-      t.occurredAt.desc(),
-    ),
+    auditUserOccurredIdx: index('audit_user_occurred_idx').on(t.userId, t.occurredAt.desc()),
   }),
 );
 

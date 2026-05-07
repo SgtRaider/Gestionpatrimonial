@@ -25,6 +25,6 @@ export type Account = z.infer<typeof accountSchema>;
 
 export const accountWithInstitutionSchema = accountSchema.extend({
   institution: institutionSchema,
-  currentBalance: z.string(),
+  currentBalance: z.string().optional(),
 });
 export type AccountWithInstitution = z.infer<typeof accountWithInstitutionSchema>;

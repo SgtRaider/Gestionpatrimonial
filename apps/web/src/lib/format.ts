@@ -35,9 +35,7 @@ export function formatPct(value: string | number): string {
 }
 
 export function decimalAdd(...values: string[]): string {
-  return values
-    .reduce((acc, v) => acc.plus(new Decimal(v)), new Decimal(0))
-    .toFixed(2);
+  return values.reduce((acc, v) => acc.plus(new Decimal(v)), new Decimal(0)).toFixed(2);
 }
 
 export function isPositive(amount: string): boolean {

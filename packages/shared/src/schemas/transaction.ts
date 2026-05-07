@@ -1,9 +1,5 @@
 import { z } from 'zod';
-import {
-  categoryKindSchema,
-  transactionSourceSchema,
-  transactionStatusSchema,
-} from '../enums.js';
+import { categoryKindSchema, transactionSourceSchema, transactionStatusSchema } from '../enums.js';
 
 export const decimalString = z
   .string()
@@ -54,3 +50,28 @@ export const transactionListQuerySchema = z.object({
   pageSize: z.number().int().min(1).max(200).default(50),
 });
 export type TransactionListQuery = z.infer<typeof transactionListQuerySchema>;
+
+// Account + institution embedded so the UI doesn't need a join lookup
+export const transactionListItemSchema = transactionSchema.extend({
+  accountName: z.string(),
+  accountIbanLast4: z.string().nullable(),
+  institutionName: z.string(),
+  institutionColor: z.string().nullable(),
+  category: categorySchema.nullable(),
+  tags: z.array(z.string()),
+});
+export type TransactionListItem = z.infer<typeof transactionListItemSchema>;
+
+export const transactionListResponseSchema = z.object({
+  items: z.array(transactionListItemSchema),
+  total: z.number().int().nonnegative(),
+  page: z.number().int().min(1),
+  pageSize: z.number().int().min(1),
+  summary: z.object({
+    income: decimalString,
+    expenses: decimalString,
+    net: decimalString,
+    count: z.number().int().nonnegative(),
+  }),
+});
+export type TransactionListResponse = z.infer<typeof transactionListResponseSchema>;
