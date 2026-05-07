@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '../db/index.js';
 import { insights } from '../db/schema.js';
 import { buildDashboard } from '../services/dashboard.js';
+import { listInsights } from '../services/insights-list.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
@@ -16,6 +17,9 @@ export const dashboardRoutes: FastifyPluginAsync = async (app) => {
     const { period } = querySchema.parse(request.query);
     return buildDashboard(DEFAULT_USER_ID, period);
   });
+
+  // Full insight feed for /optimizacion (active + acted + dismissed).
+  app.get('/insights', async () => listInsights(DEFAULT_USER_ID));
 
   // Tag an insight as dismissed (user said "not interested") or acted on
   // (user followed through). The detector skips signatures that already have

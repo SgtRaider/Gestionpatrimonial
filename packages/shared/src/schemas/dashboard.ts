@@ -87,6 +87,29 @@ export const dashboardInsightSchema = z.object({
 });
 export type DashboardInsight = z.infer<typeof dashboardInsightSchema>;
 
+// Full insight record for /optimizacion (includes lifecycle timestamps so the
+// UI can split by status active/acted/dismissed).
+export const insightStatusSchema = z.enum(['active', 'acted', 'dismissed']);
+export type InsightStatus = z.infer<typeof insightStatusSchema>;
+
+export const insightFullSchema = dashboardInsightSchema.extend({
+  severity: z.enum(['info', 'warning', 'urgent']),
+  status: insightStatusSchema,
+  createdAt: z.string().datetime(),
+  resolvedAt: z.string().datetime().nullable(),
+});
+export type InsightFull = z.infer<typeof insightFullSchema>;
+
+export const insightsListResponseSchema = z.object({
+  insights: z.array(insightFullSchema),
+  totals: z.object({
+    activeCount: z.number().int().nonnegative(),
+    activeSavings: decimalString,
+    actedSavings: decimalString,
+  }),
+});
+export type InsightsListResponse = z.infer<typeof insightsListResponseSchema>;
+
 export const attentionAlertSchema = z.object({
   id: z.string(),
   kind: z.enum([

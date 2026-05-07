@@ -1,7 +1,7 @@
-import { ComingSoon } from '@/components/layout/page-header';
+import { OptimizacionClient } from './optimizacion-client';
 
 export const metadata = { title: 'Optimización · Gestión Patrimonial' };
 
 export default function OptimizacionPage() {
-  return <ComingSoon section="Optimización" />;
+  return <OptimizacionClient />;
 }

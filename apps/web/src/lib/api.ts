@@ -20,6 +20,7 @@ import {
   type ImportCommitResponse,
   type ImportMapping,
   type ImportPreviewResponse,
+  type InsightsListResponse,
   type LoanDetail,
   type LoanSummary,
   type MarkRecurringInput,
@@ -55,6 +56,7 @@ import {
   holdingSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
+  insightsListResponseSchema,
   loanDetailSchema,
   loanSummarySchema,
   markRecurringResponseSchema,
@@ -335,6 +337,9 @@ export const api = {
 
   updateRecurringRule: (id: string, patch: UpdateRecurringRuleInput): Promise<RecurringRule> =>
     send('PATCH', `/api/recurring-rules/${id}`, patch, (raw) => recurringRuleSchema.parse(raw)),
+
+  listInsights: (): Promise<InsightsListResponse> =>
+    get('/api/insights', (raw) => insightsListResponseSchema.parse(raw)),
 
   dismissInsight: (id: string): Promise<{ id: string; ok: boolean }> =>
     send('POST', `/api/insights/${id}/dismiss`, undefined, (raw) =>
