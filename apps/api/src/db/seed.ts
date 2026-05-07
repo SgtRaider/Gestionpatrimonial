@@ -144,6 +144,11 @@ async function seed() {
 
   process.stdout.write(`Inserting ${recurringRulesSeed.length} recurring rules…\n`);
   const categoryByName = new Map(categoriesFixture.map((c) => [c.id, c]));
+  // Pick a next_expected_at one week from now so the dashboard's "upcoming" list
+  // has fresh content immediately after seeding.
+  const nextExpected = new Date();
+  nextExpected.setDate(nextExpected.getDate() + 7);
+  const nextExpectedYmd = nextExpected.toISOString().slice(0, 10);
   await db.insert(recurringRules).values(
     recurringRulesSeed.map((r) => {
       const slugToId: Record<string, string> = {
@@ -163,6 +168,7 @@ async function seed() {
         expectedAmount: r.expectedAmount,
         currency: 'EUR',
         frequency: r.frequency,
+        nextExpectedAt: nextExpectedYmd,
         categoryId,
         accountId: null,
         status: 'active' as const,
