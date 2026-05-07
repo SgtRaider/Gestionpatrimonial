@@ -9,9 +9,19 @@ type Props = {
   value: string | null;
   onSelect: (categoryId: string | null) => void;
   onCancel: () => void;
+  // 'bottom' (default) opens below the anchor; 'top' opens above. Use 'top'
+  // when the anchor is itself near the bottom of the viewport (e.g. a sticky
+  // bulk-action bar) so the popover doesn't get clipped.
+  placement?: 'top' | 'bottom';
 };
 
-export function CategoryCombobox({ categories, value, onSelect, onCancel }: Props) {
+export function CategoryCombobox({
+  categories,
+  value,
+  onSelect,
+  onCancel,
+  placement = 'bottom',
+}: Props) {
   const [search, setSearch] = useState('');
   const [highlighted, setHighlighted] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -80,7 +90,10 @@ export function CategoryCombobox({ categories, value, onSelect, onCancel }: Prop
   return (
     <div
       ref={containerRef}
-      className="absolute z-40 left-0 top-full mt-1 w-72 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-xl"
+      className={cn(
+        'absolute z-40 left-0 w-72 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] shadow-xl',
+        placement === 'top' ? 'bottom-full mb-1' : 'top-full mt-1',
+      )}
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="p-2 border-b border-[var(--color-border)]">

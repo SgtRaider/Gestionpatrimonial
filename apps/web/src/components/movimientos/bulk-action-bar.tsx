@@ -38,17 +38,16 @@ export function BulkActionBar({
             🏷 Categorizar
           </button>
           {openCategorize ? (
-            <div className="absolute bottom-full left-0 mb-2">
-              <CategoryCombobox
-                categories={categories}
-                value={null}
-                onSelect={(id) => {
-                  setOpenCategorize(false);
-                  onCategorize(id);
-                }}
-                onCancel={() => setOpenCategorize(false)}
-              />
-            </div>
+            <CategoryCombobox
+              categories={categories}
+              value={null}
+              placement="top"
+              onSelect={(id) => {
+                setOpenCategorize(false);
+                onCategorize(id);
+              }}
+              onCancel={() => setOpenCategorize(false)}
+            />
           ) : null}
         </div>
         <button
