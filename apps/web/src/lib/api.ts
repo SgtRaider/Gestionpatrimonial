@@ -11,10 +11,14 @@ import {
   type ImportPreviewResponse,
   type LoanDetail,
   type LoanSummary,
+  type MarkRecurringInput,
+  type MarkRecurringResponse,
   type PrepaymentSimulationInput,
   type PrepaymentSimulationResponse,
   type TransactionListResponse,
   type TransactionPatch,
+  type UnlinkRecurringInput,
+  type UnlinkRecurringResponse,
   accountWithInstitutionSchema,
   bulkCategorizeResponseSchema,
   categorySchema,
@@ -24,8 +28,10 @@ import {
   importPreviewResponseSchema,
   loanDetailSchema,
   loanSummarySchema,
+  markRecurringResponseSchema,
   prepaymentSimulationResponseSchema,
   transactionListResponseSchema,
+  unlinkRecurringResponseSchema,
 } from '@gp/shared';
 import { z } from 'zod';
 
@@ -145,6 +151,14 @@ export const api = {
   ): Promise<CreateCategorizationRuleResponse> =>
     send('POST', '/api/categorization-rules', input, (raw) =>
       createCategorizationRuleResponseSchema.parse(raw),
+    ),
+
+  markRecurring: (input: MarkRecurringInput): Promise<MarkRecurringResponse> =>
+    send('POST', '/api/recurring-rules', input, (raw) => markRecurringResponseSchema.parse(raw)),
+
+  unlinkRecurring: (input: UnlinkRecurringInput): Promise<UnlinkRecurringResponse> =>
+    send('POST', '/api/recurring-rules/unlink', input, (raw) =>
+      unlinkRecurringResponseSchema.parse(raw),
     ),
 
   importTransactionsPreview: async (args: {

@@ -213,6 +213,7 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
       bookedAt: transactions.bookedAt,
       amount: transactions.amount,
       description: transactions.descriptionRaw,
+      recurringRuleId: transactions.recurringRuleId,
     })
     .from(transactions)
     .where(
@@ -226,6 +227,15 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
       ),
     );
 
+  // Merchants whose transactions are already linked to a recurring rule are
+  // considered "declared" by the user — skip the auto-detector for them so we
+  // don't surface a duplicate "is this a subscription?" prompt.
+  const declaredMerchants = new Set<string>();
+  for (const r of rows) {
+    if (!r.recurringRuleId || !r.merchantRaw) continue;
+    declaredMerchants.add(r.merchantRaw.trim().toLowerCase());
+  }
+
   type Group = { display: string; dates: Date[]; amounts: Decimal[] };
   const groups = new Map<string, Group>();
   for (const r of rows) {
@@ -234,6 +244,7 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     if (!display) continue;
     if (LOAN_DESCRIPTION_RE.test(r.description) || LOAN_DESCRIPTION_RE.test(display)) continue;
     const key = display.toLowerCase();
+    if (declaredMerchants.has(key)) continue;
     const g = groups.get(key) ?? { display, dates: [], amounts: [] };
     g.dates.push(new Date(r.bookedAt));
     g.amounts.push(new Decimal(r.amount).abs());

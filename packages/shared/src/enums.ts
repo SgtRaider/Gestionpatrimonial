@@ -56,6 +56,19 @@ export const recurringFrequencySchema = z.enum([
 ]);
 export type RecurringFrequency = z.infer<typeof recurringFrequencySchema>;
 
+export const recurringKindSchema = z.enum([
+  'subscription',
+  'bill',
+  'salary',
+  'rent',
+  'transfer',
+  'other',
+]);
+export type RecurringKind = z.infer<typeof recurringKindSchema>;
+
+export const recurringStatusSchema = z.enum(['active', 'paused', 'cancelled']);
+export type RecurringStatus = z.infer<typeof recurringStatusSchema>;
+
 export const certaintySchema = z.enum(['low', 'medium', 'high', 'certain']);
 export type Certainty = z.infer<typeof certaintySchema>;
 

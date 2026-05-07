@@ -3,6 +3,7 @@
 import { PageHeader } from '@/components/layout/page-header';
 import { BulkActionBar } from '@/components/movimientos/bulk-action-bar';
 import { CreateRuleDialog } from '@/components/movimientos/create-rule-dialog';
+import { MarkRecurringDialog } from '@/components/movimientos/mark-recurring-dialog';
 import { TransactionDetail } from '@/components/movimientos/transaction-detail';
 import { TransactionsTable } from '@/components/movimientos/transactions-table';
 import { TransactionsToolbar } from '@/components/movimientos/transactions-toolbar';
@@ -45,6 +46,7 @@ export function MovimientosClient() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [pendingRule, setPendingRule] = useState<PendingRule | null>(null);
+  const [recurringSelection, setRecurringSelection] = useState<TransactionListItem[] | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
   // Auto-dismiss toasts after a delay so they don't pile up.
@@ -193,6 +195,45 @@ export function MovimientosClient() {
     },
   });
 
+  const markRecurringMutation = useMutation({
+    mutationFn: api.markRecurring,
+    onSuccess: (resp) => {
+      showToast({
+        message: `🔁 ${resp.rule.name} marcada como recurrente · ${resp.linkedCount} mov. vinculados`,
+        tone: 'success',
+      });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setRecurringSelection(null);
+      setSelectedIds(new Set());
+    },
+    onError: (err) => {
+      showToast({
+        message: `Error al marcar recurrente: ${err instanceof Error ? err.message : 'desconocido'}`,
+        tone: 'error',
+      });
+    },
+  });
+
+  const unlinkRecurringMutation = useMutation({
+    mutationFn: api.unlinkRecurring,
+    onSuccess: (resp) => {
+      const ruleNote = resp.rulesDeleted > 0 ? ' · regla eliminada' : '';
+      showToast({
+        message: `${resp.unlinkedCount} mov. desvinculados${ruleNote}`,
+        tone: 'success',
+      });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => {
+      showToast({
+        message: `Error al quitar recurrente: ${err instanceof Error ? err.message : 'desconocido'}`,
+        tone: 'error',
+      });
+    },
+  });
+
   function handleCategoryChange(tx: TransactionListItem, newCategoryId: string | null) {
     if (newCategoryId === tx.categoryId) return;
     const wasUncategorized = tx.categoryId === null;
@@ -276,6 +317,12 @@ export function MovimientosClient() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
     bulkCategorizeMutation.mutate({ ids, categoryId });
+  }
+
+  function openMarkRecurringFromBulk() {
+    const selected = items.filter((t) => selectedIds.has(t.id));
+    if (selected.length === 0) return;
+    setRecurringSelection(selected);
   }
 
   function changePage(next: number) {
@@ -375,14 +422,32 @@ export function MovimientosClient() {
         </div>
 
         <div className="hidden xl:block">
-          <TransactionDetail tx={selected} onClose={() => setSelectedId(null)} />
+          <TransactionDetail
+            tx={selected}
+            onClose={() => setSelectedId(null)}
+            onMarkRecurring={(tx) => setRecurringSelection([tx])}
+            onUnlinkRecurring={(tx) => unlinkRecurringMutation.mutate({ transactionIds: [tx.id] })}
+            isRecurringPending={
+              markRecurringMutation.isPending || unlinkRecurringMutation.isPending
+            }
+          />
         </div>
       </div>
 
       {selected ? (
         <div className="xl:hidden fixed inset-x-0 bottom-0 z-40 max-h-[70vh] overflow-auto bg-[var(--color-card)] border-t border-[var(--color-border)] rounded-t-2xl shadow-lg">
           <div className="p-4">
-            <TransactionDetail tx={selected} onClose={() => setSelectedId(null)} />
+            <TransactionDetail
+              tx={selected}
+              onClose={() => setSelectedId(null)}
+              onMarkRecurring={(tx) => setRecurringSelection([tx])}
+              onUnlinkRecurring={(tx) =>
+                unlinkRecurringMutation.mutate({ transactionIds: [tx.id] })
+              }
+              isRecurringPending={
+                markRecurringMutation.isPending || unlinkRecurringMutation.isPending
+              }
+            />
           </div>
         </div>
       ) : null}
@@ -409,10 +474,28 @@ export function MovimientosClient() {
       <BulkActionBar
         selectedCount={selectedIds.size}
         categories={categoriesQuery.data ?? []}
-        isPending={bulkCategorizeMutation.isPending}
+        isPending={bulkCategorizeMutation.isPending || markRecurringMutation.isPending}
         onCategorize={bulkCategorize}
+        onMarkRecurring={openMarkRecurringFromBulk}
         onClear={() => setSelectedIds(new Set())}
       />
+
+      {recurringSelection ? (
+        <MarkRecurringDialog
+          transactions={recurringSelection}
+          isPending={markRecurringMutation.isPending}
+          onConfirm={({ name, kind, frequency, expectedAmount }) =>
+            markRecurringMutation.mutate({
+              transactionIds: recurringSelection.map((t) => t.id),
+              name,
+              kind,
+              frequency,
+              expectedAmount,
+            })
+          }
+          onDismiss={() => setRecurringSelection(null)}
+        />
+      ) : null}
 
       {toast ? (
         <output

@@ -8,6 +8,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 import { healthRoutes } from './routes/health.js';
 import { importsRoutes } from './routes/imports.js';
 import { loansRoutes } from './routes/loans.js';
+import { recurringRoutes } from './routes/recurring.js';
 import { transactionsRoutes } from './routes/transactions.js';
 
 async function buildServer() {
@@ -32,6 +33,7 @@ async function buildServer() {
   await app.register(categorizationRulesRoutes, { prefix: '/api' });
   await app.register(importsRoutes, { prefix: '/api' });
   await app.register(loansRoutes, { prefix: '/api' });
+  await app.register(recurringRoutes, { prefix: '/api' });
 
   return app;
 }

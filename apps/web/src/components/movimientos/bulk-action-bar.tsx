@@ -9,6 +9,7 @@ type Props = {
   categories: Category[];
   isPending: boolean;
   onCategorize: (categoryId: string | null) => void;
+  onMarkRecurring: () => void;
   onClear: () => void;
 };
 
@@ -17,6 +18,7 @@ export function BulkActionBar({
   categories,
   isPending,
   onCategorize,
+  onMarkRecurring,
   onClear,
 }: Props) {
   const [openCategorize, setOpenCategorize] = useState(false);
@@ -57,6 +59,14 @@ export function BulkActionBar({
           className="px-3 py-1 rounded-full border border-[var(--color-border)] text-xs hover:bg-[var(--color-bg)] disabled:opacity-50"
         >
           Quitar categoría
+        </button>
+        <button
+          type="button"
+          onClick={onMarkRecurring}
+          disabled={isPending}
+          className="px-3 py-1 rounded-full border border-[var(--color-border)] text-xs hover:bg-[var(--color-bg)] disabled:opacity-50"
+        >
+          🔁 Recurrente
         </button>
         <button
           type="button"

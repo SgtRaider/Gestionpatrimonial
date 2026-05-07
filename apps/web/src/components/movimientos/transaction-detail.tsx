@@ -15,9 +15,15 @@ function formatLongDate(iso: string): string {
 export function TransactionDetail({
   tx,
   onClose,
+  onMarkRecurring,
+  onUnlinkRecurring,
+  isRecurringPending,
 }: {
   tx: TransactionListItem | null;
   onClose: () => void;
+  onMarkRecurring: (tx: TransactionListItem) => void;
+  onUnlinkRecurring: (tx: TransactionListItem) => void;
+  isRecurringPending: boolean;
 }) {
   if (!tx) {
     return (
@@ -128,6 +134,25 @@ export function TransactionDetail({
       </div>
 
       <div className="pt-3 border-t border-[var(--color-border)] flex flex-wrap gap-2 text-xs">
+        {tx.recurringRuleId ? (
+          <button
+            type="button"
+            onClick={() => onUnlinkRecurring(tx)}
+            disabled={isRecurringPending}
+            className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)] disabled:opacity-50"
+          >
+            ✕ Quitar recurrente
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onMarkRecurring(tx)}
+            disabled={isRecurringPending}
+            className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)] disabled:opacity-50"
+          >
+            🔁 Marcar recurrente
+          </button>
+        )}
         <button
           type="button"
           className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)]"
@@ -139,12 +164,6 @@ export function TransactionDetail({
           className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)]"
         >
           ✂ Dividir
-        </button>
-        <button
-          type="button"
-          className="px-2.5 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-bg)]"
-        >
-          📋 Duplicar
         </button>
       </div>
     </Card>
