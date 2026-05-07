@@ -5,11 +5,13 @@ import { db } from '../db/index.js';
 import {
   accounts,
   insights as insightsTable,
+  netWorthSnapshots,
   plannedEvents,
   recurringRules,
   transactions,
 } from '../db/schema.js';
 import { refreshInsights } from './insights.js';
+import { computeNetWorth } from './net-worth.js';
 
 const LARGE_EXPENSE_THRESHOLD = '200.00';
 const UPCOMING_DAYS = 30;
@@ -35,44 +37,17 @@ function ym(d: Date): string {
 // Compute distribution by account type, plus liabilities placeholder.
 // ────────────────────────────────────────────────────────────────────────────
 
+// Distribution + headline net worth come from the same `computeNetWorth`
+// service that powers /patrimonio so figures are consistent across pages
+// (holdings + loan outstanding included).
 async function computeDistribution(userId: string) {
-  const balances = await db
-    .select({
-      type: accounts.type,
-      balance: sql<string>`COALESCE(SUM(${transactions.amount}), 0)::text`,
-    })
-    .from(accounts)
-    .leftJoin(
-      transactions,
-      and(
-        eq(transactions.accountId, accounts.id),
-        isNull(transactions.deletedAt),
-        eq(transactions.isProjection, false),
-      ),
-    )
-    .where(and(eq(accounts.userId, userId), isNull(accounts.deletedAt)))
-    .groupBy(accounts.type);
-
-  let liquid = new Decimal(0);
-  let invested = new Decimal(0);
-  let realEstate = new Decimal(0);
-  let other = new Decimal(0);
-  for (const row of balances) {
-    const b = new Decimal(row.balance);
-    if (row.type === 'checking' || row.type === 'savings') liquid = liquid.plus(b);
-    else if (row.type === 'brokerage' || row.type === 'pension' || row.type === 'crypto')
-      invested = invested.plus(b);
-    else if (row.type === 'real_estate') realEstate = realEstate.plus(b);
-    else other = other.plus(b);
-  }
-
+  const nw = await computeNetWorth(userId);
   return {
-    liquid: liquid.toFixed(2),
-    invested: invested.toFixed(2),
-    realEstate: realEstate.toFixed(2),
-    other: other.toFixed(2),
-    // Loans aren't seeded yet for the demo user. Placeholder until that lands.
-    liabilities: '0.00',
+    liquid: nw.totals.liquid,
+    invested: nw.totals.invested,
+    realEstate: nw.totals.realEstate,
+    other: nw.totals.other,
+    liabilities: nw.totals.liabilities,
   };
 }
 
@@ -187,6 +162,22 @@ async function currentNetWorth(userId: string, asOf: Date): Promise<Decimal> {
       ),
     );
   return new Decimal(row?.total ?? '0');
+}
+
+// Best-effort 30-day-ago net worth: prefer the most recent snapshot ≤ asOf.
+// Falls back to `currentNetWorth(asOf)` (transactions-only sum) when no
+// snapshot is available — gives a useful flow-based delta even before the
+// user starts taking pictures.
+async function netWorthAt(userId: string, asOf: Date): Promise<Decimal> {
+  const asOfYmd = asOf.toISOString().slice(0, 10);
+  const [snap] = await db
+    .select({ netWorth: netWorthSnapshots.netWorth })
+    .from(netWorthSnapshots)
+    .where(and(eq(netWorthSnapshots.userId, userId), lte(netWorthSnapshots.snapshotAt, asOfYmd)))
+    .orderBy(desc(netWorthSnapshots.snapshotAt))
+    .limit(1);
+  if (snap) return new Decimal(snap.netWorth);
+  return currentNetWorth(userId, asOf);
 }
 
 async function cashFlowForRange(userId: string, from: Date, to: Date) {
@@ -392,8 +383,13 @@ export async function buildDashboard(userId: string): Promise<Dashboard> {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
   // KPI: Net worth (cumulative sum of all transactions up to now)
-  const totalNW = await currentNetWorth(userId, now);
-  const nw30dAgo = await currentNetWorth(userId, thirtyDaysAgo);
+  // Headline net worth uses the same source as /patrimonio so the figures
+  // match across the app (includes holdings + loan outstanding). The 30-day
+  // delta prefers a saved snapshot; if none exists, falls back to a
+  // transactions-only baseline.
+  const nwBreakdown = await computeNetWorth(userId);
+  const totalNW = new Decimal(nwBreakdown.totals.netWorth);
+  const nw30dAgo = await netWorthAt(userId, thirtyDaysAgo);
   const delta30d = totalNW.minus(nw30dAgo);
   const deltaPct30d = nw30dAgo.isZero() ? new Decimal(0) : delta30d.div(nw30dAgo.abs()).times(100);
 
