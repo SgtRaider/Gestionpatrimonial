@@ -140,6 +140,7 @@ export function PlanificacionClient() {
 
       <EventsSection
         events={eventsQuery.data ?? []}
+        goals={goalsQuery.data ?? []}
         loading={eventsQuery.isLoading}
         onDelete={(id) => deleteEventMutation.mutate(id)}
         onEdit={setEditingEvent}
@@ -157,6 +158,7 @@ export function PlanificacionClient() {
 
       {showAddEvent ? (
         <AddEventDialog
+          goals={goalsQuery.data ?? []}
           isPending={createEventMutation.isPending}
           onConfirm={(input) => createEventMutation.mutate({ ...input, currency: 'EUR' })}
           onDismiss={() => setShowAddEvent(false)}
@@ -175,6 +177,7 @@ export function PlanificacionClient() {
       {editingEvent ? (
         <EditEventDialog
           event={editingEvent}
+          goals={goalsQuery.data ?? []}
           isPending={updateEventMutation.isPending}
           onConfirm={(patch) => updateEventMutation.mutate({ id: editingEvent.id, patch })}
           onDismiss={() => setEditingEvent(null)}
@@ -428,11 +431,13 @@ function GoalCard({
 
 function EventsSection({
   events,
+  goals,
   loading,
   onDelete,
   onEdit,
 }: {
   events: PlannedEvent[];
+  goals: GoalEnriched[];
   loading: boolean;
   onDelete: (id: string) => void;
   onEdit: (e: PlannedEvent) => void;
@@ -440,6 +445,7 @@ function EventsSection({
   // Bucket past, upcoming-3-months, beyond.
   const today = new Date().toISOString().slice(0, 10);
   const upcoming = events.filter((e) => e.scheduledAt >= today);
+  const goalById = new Map(goals.map((g) => [g.id, g]));
   return (
     <section className="space-y-2">
       <h2 className="text-sm uppercase tracking-wide text-[var(--color-muted)]">
@@ -467,6 +473,9 @@ function EventsSection({
                     <span className="block text-[11px] text-[var(--color-muted)]">
                       {formatLongDate(e.scheduledAt)} · {KIND_LABEL[e.kind]} · certeza {e.certainty}
                       {e.recurrenceFrequency ? ` · 🔁 ${e.recurrenceFrequency}` : ''}
+                      {e.goalId && goalById.has(e.goalId)
+                        ? ` · 🎯 ${goalById.get(e.goalId)?.name}`
+                        : ''}
                     </span>
                   </span>
                   <span

@@ -4,7 +4,10 @@ import { v7 as uuidv7 } from 'uuid';
 import { db } from '../db/index.js';
 import {
   accounts,
+  holdingValuations,
+  holdings,
   insights as insightsTable,
+  institutions,
   loanRateHistory,
   loans,
   recurringRules,
@@ -499,6 +502,71 @@ function nextDateFor(lastBooked: Date, frequency: 'monthly' | 'weekly' | 'yearly
   return d.toISOString().slice(0, 10);
 }
 
+// Spain's Modelo 720 obligation kicks in when the holder owns assets abroad
+// (bank accounts, holdings on foreign brokers, real estate) totalling
+// ≥ €50.000 at year-end. This detector flags the holdings side: any holding
+// on an account whose institution.country is non-ES counts toward the
+// threshold. We deliberately DO NOT cap by category bucket — Modelo 720 is
+// a single >50k aggregate. Surface a warning at 80% of the threshold so the
+// user has time to consult before year-end.
+const MODELO_720_THRESHOLD = 50000;
+const MODELO_720_PROXIMITY_PCT = 0.8;
+
+async function detectModelo720(userId: string): Promise<InsightCandidate[]> {
+  const rows = await db
+    .select({
+      id: holdings.id,
+      name: holdings.name,
+      country: institutions.country,
+      quantity: holdings.quantity,
+      lastNav: sql<
+        string | null
+      >`(SELECT v.nav::text FROM ${holdingValuations} v WHERE v.holding_id = ${holdings.id} ORDER BY v.valuation_at DESC LIMIT 1)`,
+    })
+    .from(holdings)
+    .innerJoin(accounts, eq(holdings.accountId, accounts.id))
+    .innerJoin(institutions, eq(accounts.institutionId, institutions.id))
+    .where(and(eq(accounts.userId, userId), isNull(holdings.deletedAt)));
+
+  let foreignTotal = new Decimal(0);
+  for (const r of rows) {
+    if (!r.country || r.country.toUpperCase() === 'ES') continue;
+    if (!r.lastNav) continue;
+    foreignTotal = foreignTotal.plus(new Decimal(r.quantity).times(r.lastNav));
+  }
+
+  const candidates: InsightCandidate[] = [];
+  const threshold = new Decimal(MODELO_720_THRESHOLD);
+  const proximity = threshold.times(MODELO_720_PROXIMITY_PCT);
+
+  if (foreignTotal.greaterThanOrEqualTo(threshold)) {
+    candidates.push({
+      kind: 'modelo_720_alert',
+      signature: 'modelo_720:over',
+      severity: 'urgent',
+      title: `Obligación Modelo 720 — ${eur(foreignTotal)} en activos extranjeros`,
+      description:
+        'Tus posiciones en brokers/cuentas no españoles superan los 50.000 € agregados. Recuerda declarar el Modelo 720 antes del 31 de marzo.',
+      estimatedSavings: null,
+      actionable: false,
+      payload: { foreignTotal: foreignTotal.toFixed(2) },
+    });
+  } else if (foreignTotal.greaterThanOrEqualTo(proximity)) {
+    candidates.push({
+      kind: 'modelo_720_alert',
+      signature: 'modelo_720:near',
+      severity: 'info',
+      title: `Cerca del umbral Modelo 720 — ${eur(foreignTotal)} / 50.000 €`,
+      description:
+        'Tus activos extranjeros se acercan al umbral. Si los superas a 31-dic, tendrás que declarar el Modelo 720.',
+      estimatedSavings: null,
+      actionable: false,
+      payload: { foreignTotal: foreignTotal.toFixed(2) },
+    });
+  }
+  return candidates;
+}
+
 async function detectHighFees(userId: string): Promise<InsightCandidate[]> {
   // Sum all transactions whose description matches commission-like patterns
   // over the last 12 months.
@@ -556,14 +624,15 @@ export async function refreshInsights(userId: string): Promise<void> {
     loansData.push({ loan, schedule });
   }
 
-  const [idle, mort, low, fees, subs] = await Promise.all([
+  const [idle, mort, low, fees, subs, m720] = await Promise.all([
     detectIdleLiquidity(userId),
     detectMortgageRate(userId, loansData),
     detectLowSavingsRate(userId),
     detectHighFees(userId),
     detectRecurringSubscriptions(userId),
+    detectModelo720(userId),
   ]);
-  const candidates = [...idle, ...mort, ...low, ...fees, ...subs];
+  const candidates = [...idle, ...mort, ...low, ...fees, ...subs, ...m720];
 
   // Skip candidates whose signature matches a dismissed/acted insight (preserve
   // the user's choice across refreshes).

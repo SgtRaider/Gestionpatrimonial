@@ -6,6 +6,7 @@ import {
   createLoanInputSchema,
   manualMatchPaymentInputSchema,
   prepaymentSimulationInputSchema,
+  updateLoanInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import { and, asc, eq, gte, isNull, lte } from 'drizzle-orm';
@@ -143,6 +144,53 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
     });
 
     return { id: inserted.id, ok: true };
+  });
+
+  // Patch tuning fields (alias, lender, rate params, fee, fiscal, notes).
+  // Schedule-defining fields (principal, term, started, amortization system,
+  // rate type) are intentionally NOT editable — changing them mid-life would
+  // invalidate the matched payment history.
+  app.patch('/loans/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = updateLoanInputSchema.parse(request.body);
+    if (Object.keys(body).length === 0) {
+      return reply.code(400).send({ error: 'Empty patch' });
+    }
+    const fields: Record<string, unknown> = { updatedAt: new Date() };
+    if ('alias' in body) fields.alias = body.alias;
+    if ('lender' in body) fields.lender = body.lender;
+    if ('rateFixed' in body) fields.rateFixed = body.rateFixed;
+    if ('rateIndex' in body) fields.rateIndex = body.rateIndex;
+    if ('rateSpread' in body) fields.rateSpread = body.rateSpread;
+    if ('reviewFrequencyMonths' in body) fields.reviewFrequencyMonths = body.reviewFrequencyMonths;
+    if ('prepaymentFeePct' in body) fields.prepaymentFeePct = body.prepaymentFeePct;
+    if ('fiscalDeductible' in body) fields.fiscalDeductible = body.fiscalDeductible;
+    if ('notes' in body) fields.notes = body.notes;
+
+    const [updated] = await db
+      .update(loans)
+      .set(fields)
+      .where(
+        and(eq(loans.id, params.id), eq(loans.userId, DEFAULT_USER_ID), isNull(loans.deletedAt)),
+      )
+      .returning({ id: loans.id });
+    if (!updated) return reply.code(404).send({ error: 'Préstamo no encontrado' });
+    return { ok: true };
+  });
+
+  app.delete('/loans/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const updated = await db
+      .update(loans)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(eq(loans.id, params.id), eq(loans.userId, DEFAULT_USER_ID), isNull(loans.deletedAt)),
+      )
+      .returning({ id: loans.id });
+    if (updated.length === 0) {
+      return reply.code(404).send({ error: 'Préstamo no encontrado' });
+    }
+    return { ok: true };
   });
 
   app.get('/loans/:id', async (request, reply) => {

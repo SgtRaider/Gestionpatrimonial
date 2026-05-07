@@ -36,6 +36,7 @@ import {
   type UnlinkRecurringInput,
   type UnlinkRecurringResponse,
   type UpdateGoalInput,
+  type UpdateLoanInput,
   type UpdatePlannedEventInput,
   type UpdateRecurringRuleInput,
   accountWithInstitutionSchema,
@@ -240,6 +241,14 @@ export const api = {
   createLoan: (input: CreateLoanInput): Promise<{ id: string; ok: boolean }> =>
     send('POST', '/api/loans', input, (raw) =>
       z.object({ id: z.string().uuid(), ok: z.boolean() }).parse(raw),
+    ),
+
+  updateLoan: (id: string, patch: UpdateLoanInput): Promise<{ ok: boolean }> =>
+    send('PATCH', `/api/loans/${id}`, patch, (raw) => z.object({ ok: z.boolean() }).parse(raw)),
+
+  deleteLoan: (id: string): Promise<{ ok: boolean }> =>
+    send('DELETE', `/api/loans/${id}`, undefined, (raw) =>
+      z.object({ ok: z.boolean() }).parse(raw),
     ),
 
   addLoanRateHistory: (

@@ -105,15 +105,19 @@ async function computeCashFlowSeries(userId: string, anchor: Date) {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// Net worth time series. Computed by walking back from the current
-// (cumulative) total and subtracting each month's full net delta.
-// "Net delta" here INCLUDES transfer pairs because internal moves don't
-// change the user's total cash position.
+// Net worth time series for the headline 12-month chart.
+// Strategy: pin each month's point to a real `net_worth_snapshot` when one
+// exists for that month (most accurate — reflects holdings + loans at the
+// time). For months without a snapshot, fall back to the flow-based
+// reconstruction: walk back from `currentNetWorth` subtracting each month's
+// transaction delta. This blends "pictures" with "bank statements" — exact
+// where we have data, approximate elsewhere.
 // ────────────────────────────────────────────────────────────────────────────
 
 async function computeNetWorthSeries(userId: string, anchor: Date, currentNetWorth: Decimal) {
   const seriesStart = addMonths(startOfMonth(anchor), -(SERIES_MONTHS - 1));
-  const rows = await db
+
+  const txDeltaRows = await db
     .select({
       month: sql<string>`to_char(${transactions.bookedAt}, 'YYYY-MM')`,
       net: sql<string>`COALESCE(SUM(${transactions.amount}), 0)::text`,
@@ -128,19 +132,41 @@ async function computeNetWorthSeries(userId: string, anchor: Date, currentNetWor
       ),
     )
     .groupBy(sql`to_char(${transactions.bookedAt}, 'YYYY-MM')`);
-
   const monthDeltas = new Map<string, Decimal>();
-  for (const r of rows) monthDeltas.set(r.month, new Decimal(r.net));
+  for (const r of txDeltaRows) monthDeltas.set(r.month, new Decimal(r.net));
 
-  // Walk most-recent-first; running starts at the current end-of-period net
-  // worth, and we subtract each month's delta to get the END-OF-PREVIOUS-month
-  // value. Then reverse to ascending.
+  // Latest snapshot per month within the window.
+  const snapRows = await db
+    .select({
+      snapshotAt: netWorthSnapshots.snapshotAt,
+      netWorth: netWorthSnapshots.netWorth,
+    })
+    .from(netWorthSnapshots)
+    .where(
+      and(
+        eq(netWorthSnapshots.userId, userId),
+        gte(netWorthSnapshots.snapshotAt, ymd(seriesStart)),
+      ),
+    )
+    .orderBy(asc(netWorthSnapshots.snapshotAt));
+  const monthSnapshot = new Map<string, Decimal>();
+  for (const r of snapRows) {
+    monthSnapshot.set(r.snapshotAt.slice(0, 7), new Decimal(r.netWorth));
+  }
+
   const points: { date: string; netWorth: string }[] = [];
   let running = currentNetWorth;
   for (let i = SERIES_MONTHS - 1; i >= 0; i--) {
     const monthDate = addMonths(seriesStart, i);
-    points.push({ date: ymd(monthDate), netWorth: running.toFixed(2) });
-    running = running.minus(monthDeltas.get(ym(monthDate)) ?? new Decimal(0));
+    const monthKey = ym(monthDate);
+    const snap = monthSnapshot.get(monthKey);
+    if (snap) {
+      points.push({ date: ymd(monthDate), netWorth: snap.toFixed(2) });
+      running = snap.minus(monthDeltas.get(monthKey) ?? new Decimal(0));
+    } else {
+      points.push({ date: ymd(monthDate), netWorth: running.toFixed(2) });
+      running = running.minus(monthDeltas.get(monthKey) ?? new Decimal(0));
+    }
   }
   return points.reverse();
 }

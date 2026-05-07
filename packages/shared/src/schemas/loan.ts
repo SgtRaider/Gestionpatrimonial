@@ -113,6 +113,25 @@ export const createLoanInputSchema = z.object({
 });
 export type CreateLoanInput = z.infer<typeof createLoanInputSchema>;
 
+// Patch input excludes principal/term/started/system/rateType once the loan
+// is created — those define the schedule and changing them mid-life would
+// invalidate the matched payments. Allow tuning the rate parameters,
+// prepayment fee, alias, lender, fiscal flag and notes only.
+export const updateLoanInputSchema = z
+  .object({
+    alias: z.string().max(100).nullable(),
+    lender: z.string().min(1).max(100),
+    rateFixed: decimalString.nullable(),
+    rateIndex: z.string().max(50).nullable(),
+    rateSpread: decimalString.nullable(),
+    reviewFrequencyMonths: z.number().int().positive().nullable(),
+    prepaymentFeePct: decimalString,
+    fiscalDeductible: z.boolean(),
+    notes: z.string().max(2000).nullable(),
+  })
+  .partial();
+export type UpdateLoanInput = z.infer<typeof updateLoanInputSchema>;
+
 export const loanDetailSchema = loanSummarySchema.extend({
   principalInitial: decimalString,
   prepaymentFeePct: decimalString.nullable(),

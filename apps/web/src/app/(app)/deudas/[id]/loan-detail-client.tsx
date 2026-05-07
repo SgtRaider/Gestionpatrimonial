@@ -1,6 +1,7 @@
 'use client';
 
 import { AddRateReviewDialog } from '@/components/deudas/add-rate-review-dialog';
+import { EditLoanDialog } from '@/components/deudas/edit-loan-dialog';
 import { InvestVsAmortizeDialog } from '@/components/deudas/invest-vs-amortize-dialog';
 import { ManualMatchDialog } from '@/components/deudas/manual-match-dialog';
 import { PrepaymentDialog } from '@/components/deudas/prepayment-dialog';
@@ -12,7 +13,7 @@ import { formatEur, formatPct } from '@/lib/format';
 import type { LoanDetail, LoanScheduleRow } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
 const SCHEDULE_PAGE_SIZE = 50;
@@ -63,7 +64,30 @@ function Body({ loan }: { loan: LoanDetail }) {
   const [showInvestCompare, setShowInvestCompare] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<LoanScheduleRow | null>(null);
   const [matchTarget, setMatchTarget] = useState<LoanScheduleRow | null>(null);
+  const [showEditLoan, setShowEditLoan] = useState(false);
   const queryClient = useQueryClient();
+  const router = useRouter();
+
+  const updateLoanMutation = useMutation({
+    mutationFn: (patch: Parameters<typeof api.updateLoan>[1]) => api.updateLoan(loan.id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loan', loan.id] });
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['net-worth'] });
+      setShowEditLoan(false);
+    },
+  });
+
+  const deleteLoanMutation = useMutation({
+    mutationFn: () => api.deleteLoan(loan.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['net-worth'] });
+      router.push('/deudas');
+    },
+  });
 
   const matchMutation = useMutation({
     mutationFn: ({ period, transactionId }: { period: number; transactionId: string }) =>
@@ -136,6 +160,13 @@ function Body({ loan }: { loan: LoanDetail }) {
               className="text-sm px-3 py-1.5 rounded border border-[var(--color-accent)] text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10"
             >
               ⚖ ¿Amortizar o invertir?
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowEditLoan(true)}
+              className="text-sm px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+            >
+              ✏️ Editar
             </button>
             <Link
               href="/deudas"
@@ -460,6 +491,14 @@ function Body({ loan }: { loan: LoanDetail }) {
             matchMutation.mutate({ period: matchTarget.period, transactionId })
           }
           onDismiss={() => setMatchTarget(null)}
+        />
+      ) : null}
+      {showEditLoan ? (
+        <EditLoanDialog
+          loan={loan}
+          isPending={updateLoanMutation.isPending}
+          onConfirm={(patch) => updateLoanMutation.mutate(patch)}
+          onDismiss={() => setShowEditLoan(false)}
         />
       ) : null}
     </div>

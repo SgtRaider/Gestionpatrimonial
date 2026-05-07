@@ -1,6 +1,6 @@
 'use client';
 
-import type { Certainty, PlannedEventKind, RecurringFrequency } from '@gp/shared';
+import type { Certainty, GoalEnriched, PlannedEventKind, RecurringFrequency } from '@gp/shared';
 import { useState } from 'react';
 
 const KIND_LABELS: Record<PlannedEventKind, string> = {
@@ -32,6 +32,7 @@ const FREQUENCY_LABELS: Record<RecurringFrequency, string> = {
 };
 
 type Props = {
+  goals: GoalEnriched[];
   isPending: boolean;
   onConfirm: (input: {
     name: string;
@@ -41,11 +42,12 @@ type Props = {
     certainty: Certainty;
     recurrenceFrequency: RecurringFrequency | null;
     recurrenceUntil: string | null;
+    goalId: string | null;
   }) => void;
   onDismiss: () => void;
 };
 
-export function AddEventDialog({ isPending, onConfirm, onDismiss }: Props) {
+export function AddEventDialog({ goals, isPending, onConfirm, onDismiss }: Props) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<PlannedEventKind>('expense');
   const [amount, setAmount] = useState('');
@@ -54,6 +56,7 @@ export function AddEventDialog({ isPending, onConfirm, onDismiss }: Props) {
   const [isRecurring, setIsRecurring] = useState(false);
   const [frequency, setFrequency] = useState<RecurringFrequency>('monthly');
   const [until, setUntil] = useState('');
+  const [goalId, setGoalId] = useState<string>('');
 
   const numberValid = (s: string) => /^-?\d+(\.\d+)?$/.test(s);
   const canSubmit = name.trim().length > 0 && numberValid(amount) && !isPending;
@@ -150,6 +153,23 @@ export function AddEventDialog({ isPending, onConfirm, onDismiss }: Props) {
           </Field>
         </div>
 
+        {goals.length > 0 ? (
+          <Field label="Vincular a objetivo" hint="opcional">
+            <select
+              value={goalId}
+              onChange={(e) => setGoalId(e.target.value)}
+              className="mt-1 w-full h-9 px-2 text-sm rounded border border-[var(--color-border)] bg-[var(--color-bg)]"
+            >
+              <option value="">— ninguno —</option>
+              {goals.map((g) => (
+                <option key={g.id} value={g.id}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : null}
+
         <fieldset className="border border-[var(--color-border)] rounded-lg p-3 space-y-2">
           <legend className="px-1 text-[11px] uppercase tracking-wide text-[var(--color-muted)]">
             Recurrencia
@@ -209,6 +229,7 @@ export function AddEventDialog({ isPending, onConfirm, onDismiss }: Props) {
                 certainty,
                 recurrenceFrequency: isRecurring ? frequency : null,
                 recurrenceUntil: isRecurring && until ? until : null,
+                goalId: goalId || null,
               })
             }
             disabled={!canSubmit}
