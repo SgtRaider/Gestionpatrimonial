@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { decimalString } from './transaction.js';
 
+export const dashboardPeriodSchema = z.enum(['month', 'quarter', 'halfyear', 'year']);
+export type DashboardPeriod = z.infer<typeof dashboardPeriodSchema>;
+
 export const kpiSchema = z.object({
   netWorth: z.object({
     value: decimalString,
@@ -10,6 +13,7 @@ export const kpiSchema = z.object({
   cashFlowMonth: z.object({
     value: decimalString,
     deltaVsMedian6m: decimalString,
+    period: dashboardPeriodSchema.default('month'),
   }),
   savingsRate: z.object({
     value: decimalString,

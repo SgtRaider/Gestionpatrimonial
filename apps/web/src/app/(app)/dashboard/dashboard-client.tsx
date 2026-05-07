@@ -13,12 +13,23 @@ import {
 import { NetWorthChart } from '@/components/dashboard/net-worth-chart';
 import { UpcomingEvents } from '@/components/dashboard/upcoming-events';
 import { api } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import type { DashboardPeriod } from '@gp/shared';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+
+const PERIOD_OPTIONS: { value: DashboardPeriod; label: string }[] = [
+  { value: 'month', label: 'Mes' },
+  { value: 'quarter', label: 'Trimestre' },
+  { value: 'halfyear', label: '6 meses' },
+  { value: 'year', label: 'Año' },
+];
 
 export function DashboardClient() {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: api.getDashboard,
+  const queryClient = useQueryClient();
+  const [period, setPeriod] = useState<DashboardPeriod>('month');
+  const { data, isLoading, isError, error, isFetching } = useQuery({
+    queryKey: ['dashboard', period],
+    queryFn: () => api.getDashboard(period),
   });
 
   if (isLoading) {
@@ -48,17 +59,25 @@ export function DashboardClient() {
           <p className="text-sm text-[var(--color-muted)] capitalize">{today}</p>
         </div>
         <div className="flex gap-2 text-sm">
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as DashboardPeriod)}
+            aria-label="Periodo"
+            className="px-3 h-9 rounded border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
+          >
+            {PERIOD_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
-            className="px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)]"
+            onClick={() => queryClient.invalidateQueries({ queryKey: ['dashboard'] })}
+            disabled={isFetching}
+            className="px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)] disabled:opacity-50"
           >
-            Mes ▾
-          </button>
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border border-[var(--color-border)] hover:bg-[var(--color-card)]"
-          >
-            ↻ Sync
+            {isFetching ? '↻ …' : '↻ Sync'}
           </button>
         </div>
       </header>
@@ -72,10 +91,12 @@ export function DashboardClient() {
         <CashFlowKpi
           value={data.kpis.cashFlowMonth.value}
           deltaVsMedian6m={data.kpis.cashFlowMonth.deltaVsMedian6m}
+          period={data.kpis.cashFlowMonth.period}
         />
         <SavingsRateKpi
           value={data.kpis.savingsRate.value}
           deltaPpVsMedian6m={data.kpis.savingsRate.deltaPpVsMedian6m}
+          period={data.kpis.cashFlowMonth.period}
         />
         <NextLargeExpenseKpi next={data.kpis.nextLargeExpense} />
       </div>

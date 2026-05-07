@@ -7,8 +7,15 @@ import { buildDashboard } from '../services/dashboard.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
+const querySchema = z.object({
+  period: z.enum(['month', 'quarter', 'halfyear', 'year']).default('month'),
+});
+
 export const dashboardRoutes: FastifyPluginAsync = async (app) => {
-  app.get('/dashboard', async () => buildDashboard(DEFAULT_USER_ID));
+  app.get('/dashboard', async (request) => {
+    const { period } = querySchema.parse(request.query);
+    return buildDashboard(DEFAULT_USER_ID, period);
+  });
 
   // Tag an insight as dismissed (user said "not interested") or acted on
   // (user followed through). The detector skips signatures that already have

@@ -398,7 +398,19 @@ async function computeInsights(userId: string): Promise<Dashboard['insights']> {
 // Top-level builder
 // ────────────────────────────────────────────────────────────────────────────
 
-export async function buildDashboard(userId: string): Promise<Dashboard> {
+export type DashboardPeriod = 'month' | 'quarter' | 'halfyear' | 'year';
+
+const PERIOD_MONTHS: Record<DashboardPeriod, number> = {
+  month: 1,
+  quarter: 3,
+  halfyear: 6,
+  year: 12,
+};
+
+export async function buildDashboard(
+  userId: string,
+  period: DashboardPeriod = 'month',
+): Promise<Dashboard> {
   // Regenerate insights on every dashboard load. Cheap (a handful of
   // SUM queries) and keeps the feed in sync with the latest data.
   await refreshInsights(userId);
@@ -407,6 +419,8 @@ export async function buildDashboard(userId: string): Promise<Dashboard> {
   const thisMonthStart = startOfMonth(now);
   const nextMonthStart = addMonths(thisMonthStart, 1);
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const periodMonths = PERIOD_MONTHS[period];
+  const periodStart = addMonths(thisMonthStart, -(periodMonths - 1));
 
   // KPI: Net worth (cumulative sum of all transactions up to now)
   // Headline net worth uses the same source as /patrimonio so the figures
@@ -419,15 +433,16 @@ export async function buildDashboard(userId: string): Promise<Dashboard> {
   const delta30d = totalNW.minus(nw30dAgo);
   const deltaPct30d = nw30dAgo.isZero() ? new Decimal(0) : delta30d.div(nw30dAgo.abs()).times(100);
 
-  // KPI: This month's cash flow
-  const thisMonth = await cashFlowForRange(userId, thisMonthStart, nextMonthStart);
+  // KPI: Cash flow for the selected period (defaults to current month).
+  const periodCashFlow = await cashFlowForRange(userId, periodStart, nextMonthStart);
 
-  // 6-month median for comparison (excluding current month)
-  const sixMonthsAgo = addMonths(thisMonthStart, -6);
+  // 6-period median for comparison (the previous 6 windows of the same size,
+  // ending right before this period starts). Lets the user compare apples to
+  // apples regardless of whether they picked month/quarter/halfyear/year.
   const monthlyNets: Decimal[] = [];
-  for (let i = 0; i < 6; i++) {
-    const from = addMonths(sixMonthsAgo, i);
-    const to = addMonths(from, 1);
+  for (let i = 6; i >= 1; i--) {
+    const from = addMonths(periodStart, -i * periodMonths);
+    const to = addMonths(from, periodMonths);
     const cf = await cashFlowForRange(userId, from, to);
     monthlyNets.push(cf.net);
   }
@@ -442,12 +457,12 @@ export async function buildDashboard(userId: string): Promise<Dashboard> {
     }
     return sorted[mid] ?? new Decimal(0);
   })();
-  const deltaVsMedian6m = thisMonth.net.minus(median6m);
+  const deltaVsMedian6m = periodCashFlow.net.minus(median6m);
 
-  // KPI: Savings rate (this month)
-  const savingsRate = thisMonth.income.isZero()
+  // KPI: Savings rate for the selected period.
+  const savingsRate = periodCashFlow.income.isZero()
     ? new Decimal(0)
-    : thisMonth.income.plus(thisMonth.expenses).div(thisMonth.income).times(100);
+    : periodCashFlow.income.plus(periodCashFlow.expenses).div(periodCashFlow.income).times(100);
   // Compare to median 6m savings rate
   const median6mSavingsRate = (() => {
     if (monthlyNets.length === 0) return new Decimal(0);
@@ -457,6 +472,8 @@ export async function buildDashboard(userId: string): Promise<Dashboard> {
     return new Decimal(0);
   })();
   const deltaPpVsMedian6m = savingsRate.minus(median6mSavingsRate);
+  // Reused below (cash flow KPI value).
+  const thisMonth = periodCashFlow;
 
   const upcomingEvents = await computeUpcomingEvents(userId, now);
   // KPI: next large expense
@@ -481,6 +498,7 @@ export async function buildDashboard(userId: string): Promise<Dashboard> {
       cashFlowMonth: {
         value: thisMonth.net.toFixed(2),
         deltaVsMedian6m: deltaVsMedian6m.toFixed(2),
+        period,
       },
       savingsRate: {
         value: savingsRate.toFixed(1),

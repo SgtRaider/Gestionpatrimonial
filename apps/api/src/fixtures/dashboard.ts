@@ -58,6 +58,7 @@ export const dashboardFixture: Dashboard = {
     cashFlowMonth: {
       value: '1240.00',
       deltaVsMedian6m: '-380.00',
+      period: 'month' as const,
     },
     savingsRate: {
       value: '32',

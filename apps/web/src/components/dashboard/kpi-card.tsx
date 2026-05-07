@@ -59,19 +59,28 @@ export function NetWorthKpi({
   );
 }
 
+const PERIOD_LABEL: Record<'month' | 'quarter' | 'halfyear' | 'year', string> = {
+  month: 'del mes',
+  quarter: 'del trimestre',
+  halfyear: '6 meses',
+  year: 'del año',
+};
+
 export function CashFlowKpi({
   value,
   deltaVsMedian6m,
+  period = 'month',
 }: {
   value: string;
   deltaVsMedian6m: string;
+  period?: 'month' | 'quarter' | 'halfyear' | 'year';
 }) {
   const trend: Trend = isPositive(value) ? 'positive' : 'negative';
   return (
     <KpiCard
-      label="Cash flow del mes"
+      label={`Cash flow ${PERIOD_LABEL[period]}`}
       value={formatDelta(value)}
-      delta={`${formatDelta(deltaVsMedian6m)} vs media 6m`}
+      delta={`${formatDelta(deltaVsMedian6m)} vs media 6 periodos`}
       trend={isPositive(deltaVsMedian6m) ? 'positive' : 'negative'}
     />
   );
@@ -80,16 +89,18 @@ export function CashFlowKpi({
 export function SavingsRateKpi({
   value,
   deltaPpVsMedian6m,
+  period = 'month',
 }: {
   value: string;
   deltaPpVsMedian6m: string;
+  period?: 'month' | 'quarter' | 'halfyear' | 'year';
 }) {
   const ppTrend: Trend = isPositive(deltaPpVsMedian6m) ? 'positive' : 'negative';
   return (
     <KpiCard
-      label="Tasa de ahorro"
+      label={`Tasa de ahorro ${PERIOD_LABEL[period]}`}
       value={`${value}%`}
-      delta={`${isPositive(deltaPpVsMedian6m) ? '+' : ''}${deltaPpVsMedian6m} pp vs media 6m`}
+      delta={`${isPositive(deltaPpVsMedian6m) ? '+' : ''}${deltaPpVsMedian6m} pp vs media 6 periodos`}
       trend={ppTrend}
     />
   );

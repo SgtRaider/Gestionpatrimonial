@@ -12,6 +12,7 @@ import {
   type CreateLoanInput,
   type CreatePlannedEventInput,
   type Dashboard,
+  type DashboardPeriod,
   type DeleteRecurringRuleResponse,
   type GoalEnriched,
   type Holding,
@@ -129,8 +130,8 @@ export type TransactionsQuery = {
 };
 
 export const api = {
-  getDashboard: (): Promise<Dashboard> =>
-    get('/api/dashboard', (raw) => dashboardSchema.parse(raw)),
+  getDashboard: (period: DashboardPeriod = 'month'): Promise<Dashboard> =>
+    get(`/api/dashboard?period=${period}`, (raw) => dashboardSchema.parse(raw)),
 
   getNetWorth: (): Promise<NetWorthBreakdown> =>
     get('/api/net-worth', (raw) => netWorthBreakdownSchema.parse(raw)),
