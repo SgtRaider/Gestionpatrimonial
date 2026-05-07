@@ -3,6 +3,7 @@ import {
   type LoanSummary,
   type PrepaymentSimulationResponse,
   addLoanRateHistoryInputSchema,
+  createLoanInputSchema,
   manualMatchPaymentInputSchema,
   prepaymentSimulationInputSchema,
 } from '@gp/shared';
@@ -97,6 +98,51 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
       summaries.push(buildSummary(loan, schedule));
     }
     return summaries;
+  });
+
+  // Create a new loan + seed its first rate-history row in one go. The
+  // amortization engine reads `loan_rate_history`, so a fresh loan needs at
+  // least one entry before the schedule can render.
+  app.post('/loans', async (request, reply) => {
+    const body = createLoanInputSchema.parse(request.body);
+    const id = uuidv7();
+    const [inserted] = await db
+      .insert(loans)
+      .values({
+        id,
+        userId: DEFAULT_USER_ID,
+        kind: body.kind,
+        alias: body.alias ?? null,
+        lender: body.lender,
+        principalInitial: body.principalInitial,
+        currency: body.currency,
+        startedAt: body.startedAt,
+        termMonths: body.termMonths,
+        amortizationSystem: body.amortizationSystem,
+        rateType: body.rateType,
+        rateFixed: body.rateFixed ?? null,
+        rateIndex: body.rateIndex ?? null,
+        rateSpread: body.rateSpread ?? null,
+        reviewFrequencyMonths: body.reviewFrequencyMonths ?? null,
+        prepaymentFeePct: body.prepaymentFeePct ?? '0',
+        fiscalDeductible: body.fiscalDeductible,
+        notes: body.notes ?? null,
+      })
+      .returning();
+    if (!inserted) return reply.code(500).send({ error: 'No se pudo crear el préstamo' });
+
+    await db.insert(loanRateHistory).values({
+      id: uuidv7(),
+      loanId: inserted.id,
+      effectiveAt: body.startedAt,
+      rate: body.initialRate,
+      indexValueAtReview: null,
+      spread: body.rateSpread ?? null,
+      source: 'contract',
+      notes: 'Tipo inicial al firmar',
+    });
+
+    return { id: inserted.id, ok: true };
   });
 
   app.get('/loans/:id', async (request, reply) => {

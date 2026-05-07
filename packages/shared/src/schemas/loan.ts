@@ -90,6 +90,29 @@ export const addLoanRateHistoryInputSchema = z.object({
 });
 export type AddLoanRateHistoryInput = z.infer<typeof addLoanRateHistoryInputSchema>;
 
+export const createLoanInputSchema = z.object({
+  kind: loanKindSchema,
+  alias: z.string().max(100).nullable().optional(),
+  lender: z.string().min(1).max(100),
+  principalInitial: decimalString,
+  currency: z.string().length(3).default('EUR'),
+  startedAt: z.string().date(),
+  termMonths: z.number().int().positive().max(720),
+  amortizationSystem: amortizationSystemSchema.default('french'),
+  rateType: rateTypeSchema,
+  rateFixed: decimalString.nullable().optional(),
+  rateIndex: z.string().max(50).nullable().optional(),
+  rateSpread: decimalString.nullable().optional(),
+  reviewFrequencyMonths: z.number().int().positive().nullable().optional(),
+  prepaymentFeePct: decimalString.optional(),
+  fiscalDeductible: z.boolean().default(false),
+  notes: z.string().max(2000).nullable().optional(),
+  // First rate row inserted into loan_rate_history alongside the loan.
+  // For fixed loans this is rateFixed; for variable, rateIndex value + spread.
+  initialRate: decimalString,
+});
+export type CreateLoanInput = z.infer<typeof createLoanInputSchema>;
+
 export const loanDetailSchema = loanSummarySchema.extend({
   principalInitial: decimalString,
   prepaymentFeePct: decimalString.nullable(),

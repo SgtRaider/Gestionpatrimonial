@@ -1,12 +1,15 @@
 'use client';
 
+import { AddLoanDialog } from '@/components/deudas/add-loan-dialog';
 import { PageHeader } from '@/components/layout/page-header';
 import { Card, CardHeader } from '@/components/ui/card';
 import { api } from '@/lib/api';
 import { formatEur, formatPct } from '@/lib/format';
 import type { LoanSummary } from '@gp/shared';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
 
 const KIND_LABEL: Record<string, string> = {
   mortgage: 'Hipoteca',
@@ -29,15 +32,41 @@ function progressPct(loan: LoanSummary): number {
 }
 
 export function DeudasClient() {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const [showAddLoan, setShowAddLoan] = useState(false);
   const loansQuery = useQuery({
     queryKey: ['loans'],
     queryFn: api.getLoans,
     staleTime: 60_000,
   });
 
+  const createLoanMutation = useMutation({
+    mutationFn: api.createLoan,
+    onSuccess: (resp) => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      queryClient.invalidateQueries({ queryKey: ['net-worth'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setShowAddLoan(false);
+      router.push(`/deudas/${resp.id}`);
+    },
+  });
+
   return (
     <div className="max-w-5xl mx-auto p-4 lg:p-8 space-y-4">
-      <PageHeader title="Deudas" subtitle="Préstamos e hipotecas activos" />
+      <PageHeader
+        title="Deudas"
+        subtitle="Préstamos e hipotecas activos"
+        actions={
+          <button
+            type="button"
+            onClick={() => setShowAddLoan(true)}
+            className="text-sm px-3 py-1.5 rounded bg-[var(--color-accent)] text-white"
+          >
+            + Añadir préstamo
+          </button>
+        }
+      />
 
       {loansQuery.isLoading ? (
         <Card>
@@ -114,6 +143,16 @@ export function DeudasClient() {
           ))}
         </div>
       )}
+
+      {showAddLoan ? (
+        <AddLoanDialog
+          isPending={createLoanMutation.isPending}
+          onConfirm={(input) =>
+            createLoanMutation.mutate({ ...input, currency: 'EUR', fiscalDeductible: false })
+          }
+          onDismiss={() => setShowAddLoan(false)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import {
   type CreateCategorizationRuleResponse,
   type CreateGoalInput,
   type CreateHoldingInput,
+  type CreateLoanInput,
   type CreatePlannedEventInput,
   type Dashboard,
   type DeleteRecurringRuleResponse,
@@ -234,6 +235,11 @@ export const api = {
   ): Promise<PrepaymentSimulationResponse> =>
     send('POST', `/api/loans/${loanId}/simulate-prepayment`, input, (raw) =>
       prepaymentSimulationResponseSchema.parse(raw),
+    ),
+
+  createLoan: (input: CreateLoanInput): Promise<{ id: string; ok: boolean }> =>
+    send('POST', '/api/loans', input, (raw) =>
+      z.object({ id: z.string().uuid(), ok: z.boolean() }).parse(raw),
     ),
 
   addLoanRateHistory: (
