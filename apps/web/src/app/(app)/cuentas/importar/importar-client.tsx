@@ -176,6 +176,18 @@ export function ImportarClient() {
             <CardHeader
               title="Paso 2 de 3"
               subtitle={`Detectadas ${preview.stats.totalRows} filas (${preview.stats.parsedRows} válidas, ${preview.stats.skippedRows} saltadas)`}
+              action={
+                <span
+                  className={cn(
+                    'text-xs px-2 py-1 rounded',
+                    preview.format === 'unknown'
+                      ? 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]'
+                      : 'bg-[var(--color-accent)]/10 text-[var(--color-accent)]',
+                  )}
+                >
+                  {preview.formatLabel}
+                </span>
+              }
             />
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
@@ -192,74 +204,76 @@ export function ImportarClient() {
               />
             </div>
 
-            <div>
-              <h4 className="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-2">
-                Mapeo de columnas
-              </h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <MappingSelect
-                  label={FIELD_LABELS.date}
-                  value={mapping.date}
-                  headers={preview.headers}
-                  onChange={(v) => refreshPreview({ ...mapping, date: v })}
-                />
-                <MappingSelect
-                  label={FIELD_LABELS.amount}
-                  value={mapping.amount}
-                  headers={preview.headers}
-                  onChange={(v) => refreshPreview({ ...mapping, amount: v })}
-                />
-                <MappingSelect
-                  label={FIELD_LABELS.description}
-                  value={mapping.description}
-                  headers={preview.headers}
-                  onChange={(v) => refreshPreview({ ...mapping, description: v })}
-                />
-                <MappingSelect
-                  label={FIELD_LABELS.counterparty}
-                  value={mapping.counterparty ?? ''}
-                  headers={preview.headers}
-                  optional
-                  onChange={(v) => {
-                    const { counterparty: _omit, ...rest } = mapping;
-                    const next: ImportMapping = v ? { ...rest, counterparty: v } : rest;
-                    refreshPreview(next);
-                  }}
-                />
-                <FormatSelect
-                  label="Separador decimal"
-                  value={mapping.decimalSeparator}
-                  options={[
-                    { value: 'auto', label: 'Auto-detectar' },
-                    { value: ',', label: 'Coma (1.234,56)' },
-                    { value: '.', label: 'Punto (1,234.56)' },
-                  ]}
-                  onChange={(v) =>
-                    refreshPreview({
-                      ...mapping,
-                      decimalSeparator: v as ImportMapping['decimalSeparator'],
-                    })
-                  }
-                />
-                <FormatSelect
-                  label="Formato de fecha"
-                  value={mapping.dateFormat}
-                  options={[
-                    { value: 'auto', label: 'Auto-detectar' },
-                    { value: 'iso', label: 'ISO (2026-05-04)' },
-                    { value: 'dmy-slash', label: 'DD/MM/AAAA' },
-                    { value: 'dmy-dash', label: 'DD-MM-AAAA' },
-                    { value: 'mdy-slash', label: 'MM/DD/AAAA' },
-                  ]}
-                  onChange={(v) =>
-                    refreshPreview({
-                      ...mapping,
-                      dateFormat: v as ImportMapping['dateFormat'],
-                    })
-                  }
-                />
+            {preview.headers.length > 0 ? (
+              <div>
+                <h4 className="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-2">
+                  Mapeo de columnas
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <MappingSelect
+                    label={FIELD_LABELS.date}
+                    value={mapping.date}
+                    headers={preview.headers}
+                    onChange={(v) => refreshPreview({ ...mapping, date: v })}
+                  />
+                  <MappingSelect
+                    label={FIELD_LABELS.amount}
+                    value={mapping.amount}
+                    headers={preview.headers}
+                    onChange={(v) => refreshPreview({ ...mapping, amount: v })}
+                  />
+                  <MappingSelect
+                    label={FIELD_LABELS.description}
+                    value={mapping.description}
+                    headers={preview.headers}
+                    onChange={(v) => refreshPreview({ ...mapping, description: v })}
+                  />
+                  <MappingSelect
+                    label={FIELD_LABELS.counterparty}
+                    value={mapping.counterparty ?? ''}
+                    headers={preview.headers}
+                    optional
+                    onChange={(v) => {
+                      const { counterparty: _omit, ...rest } = mapping;
+                      const next: ImportMapping = v ? { ...rest, counterparty: v } : rest;
+                      refreshPreview(next);
+                    }}
+                  />
+                  <FormatSelect
+                    label="Separador decimal"
+                    value={mapping.decimalSeparator}
+                    options={[
+                      { value: 'auto', label: 'Auto-detectar' },
+                      { value: ',', label: 'Coma (1.234,56)' },
+                      { value: '.', label: 'Punto (1,234.56)' },
+                    ]}
+                    onChange={(v) =>
+                      refreshPreview({
+                        ...mapping,
+                        decimalSeparator: v as ImportMapping['decimalSeparator'],
+                      })
+                    }
+                  />
+                  <FormatSelect
+                    label="Formato de fecha"
+                    value={mapping.dateFormat}
+                    options={[
+                      { value: 'auto', label: 'Auto-detectar' },
+                      { value: 'iso', label: 'ISO (2026-05-04)' },
+                      { value: 'dmy-slash', label: 'DD/MM/AAAA' },
+                      { value: 'dmy-dash', label: 'DD-MM-AAAA' },
+                      { value: 'mdy-slash', label: 'MM/DD/AAAA' },
+                    ]}
+                    onChange={(v) =>
+                      refreshPreview({
+                        ...mapping,
+                        dateFormat: v as ImportMapping['dateFormat'],
+                      })
+                    }
+                  />
+                </div>
               </div>
-            </div>
+            ) : null}
 
             <div>
               <h4 className="text-xs uppercase tracking-wide text-[var(--color-muted)] mb-2">
@@ -412,7 +426,7 @@ function FileDrop({
       <input
         ref={inputRef}
         type="file"
-        accept=".csv,text/csv,.txt"
+        accept=".csv,text/csv,.txt,.pdf,application/pdf"
         onChange={(e) => onChange(e.target.files?.[0] ?? null)}
         className="hidden"
       />
@@ -426,8 +440,10 @@ function FileDrop({
       ) : (
         <div className="text-[var(--color-muted)]">
           <p className="text-2xl mb-1">📄</p>
-          <p className="text-sm">Arrastra el CSV aquí o haz click</p>
-          <p className="text-xs mt-1">Máx. 5 MB · 5.000 filas</p>
+          <p className="text-sm">Arrastra el CSV o PDF aquí, o haz click</p>
+          <p className="text-xs mt-1">
+            CSV genérico · Caja Rural Extremadura PDF · MyInvestor PDF/CSV · Máx. 5 MB
+          </p>
         </div>
       )}
     </div>

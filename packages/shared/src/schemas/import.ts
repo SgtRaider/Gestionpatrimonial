@@ -46,11 +46,22 @@ export const importPreviewRowSchema = z.object({
 });
 export type ImportPreviewRow = z.infer<typeof importPreviewRowSchema>;
 
+export const importFormatSchema = z.enum([
+  'caja-rural-extremadura-pdf',
+  'myinvestor-pdf',
+  'myinvestor-csv',
+  'generic-csv',
+  'unknown',
+]);
+export type ImportFormat = z.infer<typeof importFormatSchema>;
+
 export const importPreviewResponseSchema = z.object({
   headers: z.array(z.string()),
   detectedMapping: importMappingSchema,
   sampleRows: z.array(importPreviewRowSchema),
   stats: importPreviewStatsSchema,
+  format: importFormatSchema,
+  formatLabel: z.string(),
 });
 export type ImportPreviewResponse = z.infer<typeof importPreviewResponseSchema>;
 
@@ -58,5 +69,6 @@ export const importCommitResponseSchema = z.object({
   inserted: z.number().int().nonnegative(),
   duplicates: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
+  format: importFormatSchema.optional(),
 });
 export type ImportCommitResponse = z.infer<typeof importCommitResponseSchema>;
