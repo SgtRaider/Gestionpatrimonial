@@ -3,6 +3,7 @@
 import { cn } from '@/lib/cn';
 import { formatDelta, isPositive } from '@/lib/format';
 import type { Category, TransactionListItem } from '@gp/shared';
+import { useMemo } from 'react';
 import { CategoryCell } from './category-cell';
 
 function formatDate(iso: string): string {
@@ -23,20 +24,49 @@ export function TransactionsTable({
   items,
   categories,
   selectedId,
+  selectedIds,
   onSelect,
   onCategoryChange,
+  onToggleSelected,
+  onRangeSelect,
+  onToggleAllVisible,
 }: {
   items: TransactionListItem[];
   categories: Category[];
   selectedId: string | null;
+  selectedIds: Set<string>;
   onSelect: (id: string) => void;
   onCategoryChange: (tx: TransactionListItem, newCategoryId: string | null) => void;
+  onToggleSelected: (id: string) => void;
+  onRangeSelect: (anchorId: string, targetId: string) => void;
+  onToggleAllVisible: (visible: TransactionListItem[]) => void;
 }) {
+  const allVisibleSelected = useMemo(
+    () => items.length > 0 && items.every((t) => selectedIds.has(t.id)),
+    [items, selectedIds],
+  );
+  const someVisibleSelected = useMemo(
+    () => items.some((t) => selectedIds.has(t.id)),
+    [items, selectedIds],
+  );
+
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
       <table className="w-full text-sm">
         <thead className="text-xs uppercase tracking-wide text-[var(--color-muted)] bg-[var(--color-bg)]/50">
           <tr>
+            <th className="text-center px-2 py-2 font-medium w-8">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                ref={(el) => {
+                  if (el) el.indeterminate = !allVisibleSelected && someVisibleSelected;
+                }}
+                onChange={() => onToggleAllVisible(items)}
+                aria-label="Seleccionar todas las filas visibles"
+                className="cursor-pointer"
+              />
+            </th>
             <th className="text-left px-3 py-2 font-medium w-20">Fecha</th>
             <th className="text-left px-3 py-2 font-medium">Cuenta</th>
             <th className="text-left px-3 py-2 font-medium">Contraparte</th>
@@ -48,13 +78,14 @@ export function TransactionsTable({
         <tbody>
           {items.length === 0 ? (
             <tr>
-              <td colSpan={6} className="text-center py-12 text-[var(--color-muted)]">
+              <td colSpan={7} className="text-center py-12 text-[var(--color-muted)]">
                 No hay movimientos que coincidan con los filtros.
               </td>
             </tr>
           ) : (
-            items.map((t) => {
+            items.map((t, idx) => {
               const isSelected = t.id === selectedId;
+              const isChecked = selectedIds.has(t.id);
               return (
                 <tr
                   key={t.id}
@@ -70,9 +101,37 @@ export function TransactionsTable({
                   className={cn(
                     'border-t border-[var(--color-border)] cursor-pointer hover:bg-[var(--color-bg)]/40 focus:outline-none focus:bg-[var(--color-accent)]/5',
                     isSelected && 'bg-[var(--color-accent)]/8',
+                    isChecked && 'bg-[var(--color-accent)]/5',
                     t.status === 'pending' && 'border-l-2 border-l-amber-500 border-l-dashed',
                   )}
                 >
+                  <td
+                    className="px-2 py-2 text-center"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={(e) => {
+                        const native = e.nativeEvent as MouseEvent;
+                        if (native.shiftKey) {
+                          // Find the closest previously-checked item to use as anchor.
+                          const anchor = [...items]
+                            .slice(0, idx)
+                            .reverse()
+                            .find((it) => selectedIds.has(it.id));
+                          if (anchor) {
+                            onRangeSelect(anchor.id, t.id);
+                            return;
+                          }
+                        }
+                        onToggleSelected(t.id);
+                      }}
+                      aria-label={`Seleccionar ${t.normalizedMerchant ?? t.descriptionRaw}`}
+                      className="cursor-pointer"
+                    />
+                  </td>
                   <td className="px-3 py-2 text-[var(--color-muted)] whitespace-nowrap">
                     {formatDate(t.bookedAt)}
                   </td>

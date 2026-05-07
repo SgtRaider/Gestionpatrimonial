@@ -1,4 +1,8 @@
-import { type TransactionListItem, transactionPatchSchema } from '@gp/shared';
+import {
+  type TransactionListItem,
+  bulkCategorizeInputSchema,
+  transactionPatchSchema,
+} from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -258,6 +262,22 @@ export const transactionsRoutes: FastifyPluginAsync = async (app) => {
     }
 
     return { id: params.id, ok: true };
+  });
+
+  app.post('/transactions/bulk-categorize', async (request) => {
+    const body = bulkCategorizeInputSchema.parse(request.body);
+    const updated = await db
+      .update(transactions)
+      .set({ categoryId: body.categoryId, updatedAt: new Date() })
+      .where(
+        and(
+          inArray(transactions.id, body.ids),
+          eq(transactions.userId, DEFAULT_USER_ID),
+          isNull(transactions.deletedAt),
+        ),
+      )
+      .returning({ id: transactions.id });
+    return { updated: updated.length };
   });
 
   app.get('/categories', async () => {

@@ -72,6 +72,17 @@ export const transactionPatchSchema = z
   .partial();
 export type TransactionPatch = z.infer<typeof transactionPatchSchema>;
 
+export const bulkCategorizeInputSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(500),
+  categoryId: z.string().uuid().nullable(),
+});
+export type BulkCategorizeInput = z.infer<typeof bulkCategorizeInputSchema>;
+
+export const bulkCategorizeResponseSchema = z.object({
+  updated: z.number().int().nonnegative(),
+});
+export type BulkCategorizeResponse = z.infer<typeof bulkCategorizeResponseSchema>;
+
 export const categorizationRuleSchema = z.object({
   id: z.string().uuid(),
   patternRegex: z.string(),

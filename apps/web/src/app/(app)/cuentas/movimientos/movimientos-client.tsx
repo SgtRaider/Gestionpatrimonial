@@ -1,6 +1,7 @@
 'use client';
 
 import { PageHeader } from '@/components/layout/page-header';
+import { BulkActionBar } from '@/components/movimientos/bulk-action-bar';
 import { CreateRuleDialog } from '@/components/movimientos/create-rule-dialog';
 import { TransactionDetail } from '@/components/movimientos/transaction-detail';
 import { TransactionsTable } from '@/components/movimientos/transactions-table';
@@ -42,6 +43,7 @@ export function MovimientosClient() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [pendingRule, setPendingRule] = useState<PendingRule | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
 
@@ -134,6 +136,46 @@ export function MovimientosClient() {
     },
   });
 
+  const bulkCategorizeMutation = useMutation({
+    mutationFn: api.bulkCategorize,
+    onMutate: async ({ ids, categoryId }: { ids: string[]; categoryId: string | null }) => {
+      await queryClient.cancelQueries({ queryKey: ['transactions'] });
+      const snapshot = queryClient.getQueriesData<TransactionListResponse>({
+        queryKey: ['transactions'],
+      });
+      const idSet = new Set(ids);
+      const newCategory = categoryId ? (categoryById.get(categoryId) ?? null) : null;
+      queryClient.setQueriesData<TransactionListResponse>({ queryKey: ['transactions'] }, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          items: old.items.map((it) =>
+            idSet.has(it.id) ? { ...it, categoryId, category: newCategory } : it,
+          ),
+        };
+      });
+      return { snapshot };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) {
+        for (const [key, data] of ctx.snapshot) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      showToast({ message: 'No se pudieron actualizar los movimientos', tone: 'error' });
+    },
+    onSuccess: (resp) => {
+      showToast({
+        message: `${resp.updated} ${resp.updated === 1 ? 'movimiento actualizado' : 'movimientos actualizados'}`,
+        tone: 'success',
+      });
+      setSelectedIds(new Set());
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+
   const ruleMutation = useMutation({
     mutationFn: api.createCategorizationRule,
     onSuccess: (resp) => {
@@ -192,6 +234,49 @@ export function MovimientosClient() {
   const pageSize = txQuery.data?.pageSize ?? 50;
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
   const selected = items.find((t) => t.id === selectedId) ?? null;
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function rangeSelect(anchorId: string, targetId: string) {
+    const anchorIdx = items.findIndex((t) => t.id === anchorId);
+    const targetIdx = items.findIndex((t) => t.id === targetId);
+    if (anchorIdx === -1 || targetIdx === -1) return;
+    const [from, to] = anchorIdx < targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx];
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      for (let i = from; i <= to; i++) {
+        const it = items[i];
+        if (it) next.add(it.id);
+      }
+      return next;
+    });
+  }
+
+  function toggleAllVisible(visible: TransactionListItem[]) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = visible.length > 0 && visible.every((t) => next.has(t.id));
+      if (allSelected) {
+        for (const t of visible) next.delete(t.id);
+      } else {
+        for (const t of visible) next.add(t.id);
+      }
+      return next;
+    });
+  }
+
+  function bulkCategorize(categoryId: string | null) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    bulkCategorizeMutation.mutate({ ids, categoryId });
+  }
 
   function changePage(next: number) {
     const sp = new URLSearchParams(searchParams.toString());
@@ -253,8 +338,12 @@ export function MovimientosClient() {
                 items={items}
                 categories={categoriesQuery.data ?? []}
                 selectedId={selectedId}
+                selectedIds={selectedIds}
                 onSelect={setSelectedId}
                 onCategoryChange={handleCategoryChange}
+                onToggleSelected={toggleSelected}
+                onRangeSelect={rangeSelect}
+                onToggleAllVisible={toggleAllVisible}
               />
               {pageCount > 1 ? (
                 <div className="flex items-center justify-between text-xs text-[var(--color-muted)]">
@@ -316,6 +405,14 @@ export function MovimientosClient() {
           onDismiss={() => setPendingRule(null)}
         />
       ) : null}
+
+      <BulkActionBar
+        selectedCount={selectedIds.size}
+        categories={categoriesQuery.data ?? []}
+        isPending={bulkCategorizeMutation.isPending}
+        onCategorize={bulkCategorize}
+        onClear={() => setSelectedIds(new Set())}
+      />
 
       {toast ? (
         <output

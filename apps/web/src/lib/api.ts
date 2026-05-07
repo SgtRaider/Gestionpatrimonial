@@ -1,5 +1,7 @@
 import {
   type AccountWithInstitution,
+  type BulkCategorizeInput,
+  type BulkCategorizeResponse,
   type Category,
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
@@ -10,6 +12,7 @@ import {
   type TransactionListResponse,
   type TransactionPatch,
   accountWithInstitutionSchema,
+  bulkCategorizeResponseSchema,
   categorySchema,
   createCategorizationRuleResponseSchema,
   dashboardSchema,
@@ -109,6 +112,11 @@ export const api = {
   patchTransaction: (id: string, patch: TransactionPatch) =>
     send('PATCH', `/api/transactions/${id}`, patch, (raw) =>
       patchTransactionResponseSchema.parse(raw),
+    ),
+
+  bulkCategorize: (input: BulkCategorizeInput): Promise<BulkCategorizeResponse> =>
+    send('POST', '/api/transactions/bulk-categorize', input, (raw) =>
+      bulkCategorizeResponseSchema.parse(raw),
     ),
 
   createCategorizationRule: (
