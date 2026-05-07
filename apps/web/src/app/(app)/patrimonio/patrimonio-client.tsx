@@ -18,6 +18,7 @@ import {
   YAxis,
 } from 'recharts';
 import { AddHoldingDialog } from './add-holding-dialog';
+import { HoldingDetailDialog } from './holding-detail-dialog';
 
 const ACCOUNT_TYPE_LABELS: Record<NetWorthAccount['type'], string> = {
   checking: 'Corriente',
@@ -33,6 +34,7 @@ const ACCOUNT_TYPE_LABELS: Record<NetWorthAccount['type'], string> = {
 export function PatrimonioClient() {
   const queryClient = useQueryClient();
   const [showAddHolding, setShowAddHolding] = useState(false);
+  const [openHoldingId, setOpenHoldingId] = useState<string | null>(null);
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['net-worth'],
     queryFn: api.getNetWorth,
@@ -121,7 +123,7 @@ export function PatrimonioClient() {
           <SnapshotsChart snapshots={snapshotsQuery.data ?? []} />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <AccountsCard accounts={data.accounts} />
-            <HoldingsCard holdings={data.holdings} />
+            <HoldingsCard holdings={data.holdings} onOpen={setOpenHoldingId} />
             <LoansCard loans={data.loans} />
           </div>
         </>
@@ -134,6 +136,10 @@ export function PatrimonioClient() {
           onConfirm={(input) => createHoldingMutation.mutate(input)}
           onDismiss={() => setShowAddHolding(false)}
         />
+      ) : null}
+
+      {openHoldingId ? (
+        <HoldingDetailDialog holdingId={openHoldingId} onDismiss={() => setOpenHoldingId(null)} />
       ) : null}
     </div>
   );
@@ -285,36 +291,68 @@ function AccountsCard({ accounts }: { accounts: NetWorthAccount[] }) {
 
 function HoldingsCard({
   holdings,
+  onOpen,
 }: {
   holdings: {
     id: string;
     name: string;
     ticker: string | null;
     quantity: string;
+    avgCost: string;
     marketValue: string;
   }[];
+  onOpen: (id: string) => void;
 }) {
   return (
     <Card>
       <CardHeader title="Inversiones" subtitle={`${holdings.length} posiciones`} />
       {holdings.length === 0 ? (
         <p className="text-xs text-[var(--color-muted)] py-3">
-          Sin posiciones registradas. Próximamente: añadir holding manualmente o importar de
-          MyInvestor.
+          Sin posiciones registradas. Pulsa <strong>+ Añadir posición</strong> para empezar.
         </p>
       ) : (
         <ul className="text-sm divide-y divide-[var(--color-border)]">
-          {holdings.map((h) => (
-            <li key={h.id} className="flex items-center justify-between gap-3 py-2">
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{h.name}</span>
-                <span className="block text-[11px] text-[var(--color-muted)]">
-                  {h.ticker ?? '—'} · {Number(h.quantity).toFixed(4)} ud
-                </span>
-              </span>
-              <span className="tabular-nums font-medium shrink-0">{formatEur(h.marketValue)}</span>
-            </li>
-          ))}
+          {holdings.map((h) => {
+            const cost = Number(h.quantity) * Number(h.avgCost);
+            const value = Number(h.marketValue);
+            const pnl = value - cost;
+            const pnlPct = cost > 0 ? (pnl / cost) * 100 : null;
+            return (
+              <li key={h.id} className="py-2">
+                <button
+                  type="button"
+                  onClick={() => onOpen(h.id)}
+                  className="w-full flex items-center justify-between gap-3 text-left hover:bg-[var(--color-bg)]/30 -mx-2 px-2 rounded"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium">{h.name}</span>
+                    <span className="block text-[11px] text-[var(--color-muted)]">
+                      {h.ticker ?? '—'} · {Number(h.quantity).toFixed(4)} ud
+                    </span>
+                  </span>
+                  <span className="text-right shrink-0">
+                    <span className="block tabular-nums font-medium">
+                      {formatEur(h.marketValue)}
+                    </span>
+                    {pnlPct !== null ? (
+                      <span
+                        className={cn(
+                          'block text-[11px] tabular-nums',
+                          pnl >= 0
+                            ? 'text-[var(--color-positive)]'
+                            : 'text-[var(--color-negative)]',
+                        )}
+                      >
+                        {pnl >= 0 ? '+' : ''}
+                        {pnl.toFixed(2)} € ({pnl >= 0 ? '+' : ''}
+                        {pnlPct.toFixed(1)}%)
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Card>

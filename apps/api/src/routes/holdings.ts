@@ -1,11 +1,12 @@
 import {
   type Holding,
+  type HoldingDetail,
   createHoldingInputSchema,
   recordHoldingTxInputSchema,
   recordValuationInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { v7 as uuidv7 } from 'uuid';
 import { z } from 'zod';
@@ -61,6 +62,90 @@ export const holdingsRoutes: FastifyPluginAsync = async (app) => {
       )
       .orderBy(asc(holdings.name));
     return rows.map((r) => toHolding(r.holdings));
+  });
+
+  // Single-holding detail with valuations + transactions history. Computes
+  // marketValue = qty × lastNav, costBasis = qty × avgCost, unrealisedPnL =
+  // marketValue − costBasis, all server-side so the UI doesn't have to.
+  app.get('/holdings/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const [row] = await db
+      .select({ holding: holdings })
+      .from(holdings)
+      .innerJoin(accounts, eq(holdings.accountId, accounts.id))
+      .where(
+        and(
+          eq(holdings.id, params.id),
+          eq(accounts.userId, DEFAULT_USER_ID),
+          isNull(holdings.deletedAt),
+        ),
+      );
+    if (!row) return reply.code(404).send({ error: 'Holding no encontrado' });
+
+    const valuationRows = await db
+      .select({
+        id: holdingValuations.id,
+        valuationAt: holdingValuations.valuationAt,
+        nav: holdingValuations.nav,
+        totalValue: holdingValuations.totalValue,
+        source: holdingValuations.source,
+      })
+      .from(holdingValuations)
+      .where(eq(holdingValuations.holdingId, params.id))
+      .orderBy(desc(holdingValuations.valuationAt));
+
+    const txRows = await db
+      .select({
+        id: holdingTransactions.id,
+        kind: holdingTransactions.kind,
+        occurredAt: holdingTransactions.occurredAt,
+        quantity: holdingTransactions.quantity,
+        price: holdingTransactions.price,
+        fees: holdingTransactions.fees,
+        taxes: holdingTransactions.taxes,
+        notes: holdingTransactions.notes,
+      })
+      .from(holdingTransactions)
+      .where(
+        and(eq(holdingTransactions.holdingId, params.id), isNull(holdingTransactions.deletedAt)),
+      )
+      .orderBy(desc(holdingTransactions.occurredAt));
+
+    const qty = new Decimal(row.holding.quantity);
+    const avgCost = new Decimal(row.holding.avgCost);
+    const lastNavRaw = valuationRows[0]?.nav ?? null;
+    const lastNav = lastNavRaw ? new Decimal(lastNavRaw) : null;
+    const marketValue = lastNav ? qty.times(lastNav) : new Decimal(0);
+    const costBasis = qty.times(avgCost);
+    const pnl = marketValue.minus(costBasis);
+    const pnlPct = costBasis.greaterThan(0) ? pnl.div(costBasis).times(100).toNumber() : null;
+
+    const detail: HoldingDetail = {
+      ...toHolding(row.holding),
+      lastNav: lastNavRaw,
+      marketValue: marketValue.toFixed(2),
+      costBasis: costBasis.toFixed(2),
+      unrealisedPnL: pnl.toFixed(2),
+      unrealisedPnLPct: pnlPct,
+      valuations: valuationRows.map((v) => ({
+        id: v.id,
+        valuationAt: v.valuationAt,
+        nav: v.nav,
+        totalValue: v.totalValue,
+        source: v.source,
+      })),
+      transactions: txRows.map((t) => ({
+        id: t.id,
+        kind: t.kind,
+        occurredAt: t.occurredAt.toISOString(),
+        quantity: t.quantity,
+        price: t.price,
+        fees: t.fees,
+        taxes: t.taxes,
+        notes: t.notes,
+      })),
+    };
+    return detail;
   });
 
   app.post('/holdings', async (request, reply) => {

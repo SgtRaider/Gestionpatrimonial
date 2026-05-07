@@ -69,3 +69,35 @@ export const recordHoldingTxInputSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 export type RecordHoldingTxInput = z.infer<typeof recordHoldingTxInputSchema>;
+
+export const holdingTransactionRowSchema = z.object({
+  id: z.string().uuid(),
+  kind: holdingTransactionKindSchema,
+  occurredAt: z.string().datetime(),
+  quantity: decimalString,
+  price: decimalString,
+  fees: decimalString,
+  taxes: decimalString,
+  notes: z.string().nullable(),
+});
+export type HoldingTransactionRow = z.infer<typeof holdingTransactionRowSchema>;
+
+export const holdingValuationRowSchema = z.object({
+  id: z.string().uuid(),
+  valuationAt: z.string().date(),
+  nav: decimalString,
+  totalValue: decimalString,
+  source: z.string().nullable(),
+});
+export type HoldingValuationRow = z.infer<typeof holdingValuationRowSchema>;
+
+export const holdingDetailSchema = holdingSchema.extend({
+  lastNav: decimalString.nullable(),
+  marketValue: decimalString,
+  costBasis: decimalString,
+  unrealisedPnL: decimalString,
+  unrealisedPnLPct: z.number().nullable(),
+  transactions: z.array(holdingTransactionRowSchema),
+  valuations: z.array(holdingValuationRowSchema),
+});
+export type HoldingDetail = z.infer<typeof holdingDetailSchema>;

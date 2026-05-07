@@ -13,6 +13,7 @@ import {
   type DeleteRecurringRuleResponse,
   type GoalEnriched,
   type Holding,
+  type HoldingDetail,
   type ImportCommitResponse,
   type ImportMapping,
   type ImportPreviewResponse,
@@ -43,6 +44,7 @@ import {
   dashboardSchema,
   deleteRecurringRuleResponseSchema,
   goalEnrichedSchema,
+  holdingDetailSchema,
   holdingSchema,
   importCommitResponseSchema,
   importPreviewResponseSchema,
@@ -137,6 +139,9 @@ export const api = {
 
   getHoldings: (): Promise<Holding[]> =>
     get('/api/holdings', (raw) => z.array(holdingSchema).parse(raw)),
+
+  getHoldingDetail: (id: string): Promise<HoldingDetail> =>
+    get(`/api/holdings/${id}`, (raw) => holdingDetailSchema.parse(raw)),
 
   createHolding: (input: CreateHoldingInput): Promise<Holding> =>
     send('POST', '/api/holdings', input, (raw) => holdingSchema.parse(raw)),
