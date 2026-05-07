@@ -1,10 +1,12 @@
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import sensible from '@fastify/sensible';
 import Fastify from 'fastify';
 import { config } from './config.js';
 import { categorizationRulesRoutes } from './routes/categorization-rules.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { healthRoutes } from './routes/health.js';
+import { importsRoutes } from './routes/imports.js';
 import { transactionsRoutes } from './routes/transactions.js';
 
 async function buildServer() {
@@ -19,11 +21,15 @@ async function buildServer() {
     origin: config.CORS_ORIGIN,
     credentials: true,
   });
+  await app.register(multipart, {
+    limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  });
 
   await app.register(healthRoutes);
   await app.register(dashboardRoutes, { prefix: '/api' });
   await app.register(transactionsRoutes, { prefix: '/api' });
   await app.register(categorizationRulesRoutes, { prefix: '/api' });
+  await app.register(importsRoutes, { prefix: '/api' });
 
   return app;
 }

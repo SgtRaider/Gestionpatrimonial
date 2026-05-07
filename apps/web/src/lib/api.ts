@@ -4,12 +4,17 @@ import {
   type CreateCategorizationRuleInput,
   type CreateCategorizationRuleResponse,
   type Dashboard,
+  type ImportCommitResponse,
+  type ImportMapping,
+  type ImportPreviewResponse,
   type TransactionListResponse,
   type TransactionPatch,
   accountWithInstitutionSchema,
   categorySchema,
   createCategorizationRuleResponseSchema,
   dashboardSchema,
+  importCommitResponseSchema,
+  importPreviewResponseSchema,
   transactionListResponseSchema,
 } from '@gp/shared';
 import { z } from 'zod';
@@ -112,4 +117,46 @@ export const api = {
     send('POST', '/api/categorization-rules', input, (raw) =>
       createCategorizationRuleResponseSchema.parse(raw),
     ),
+
+  importTransactionsPreview: async (args: {
+    file: File;
+    accountId: string;
+    mapping?: ImportMapping;
+  }): Promise<ImportPreviewResponse> => {
+    const fd = new FormData();
+    fd.append('file', args.file);
+    fd.append('accountId', args.accountId);
+    if (args.mapping) fd.append('mapping', JSON.stringify(args.mapping));
+    const res = await fetch(`${API_URL}/api/imports/transactions/preview`, {
+      method: 'POST',
+      body: fd,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Import preview failed (${res.status}): ${text}`);
+    }
+    const json: unknown = await res.json();
+    return importPreviewResponseSchema.parse(json);
+  },
+
+  importTransactionsCommit: async (args: {
+    file: File;
+    accountId: string;
+    mapping?: ImportMapping;
+  }): Promise<ImportCommitResponse> => {
+    const fd = new FormData();
+    fd.append('file', args.file);
+    fd.append('accountId', args.accountId);
+    if (args.mapping) fd.append('mapping', JSON.stringify(args.mapping));
+    const res = await fetch(`${API_URL}/api/imports/transactions/commit`, {
+      method: 'POST',
+      body: fd,
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      throw new Error(`Import commit failed (${res.status}): ${text}`);
+    }
+    const json: unknown = await res.json();
+    return importCommitResponseSchema.parse(json);
+  },
 };

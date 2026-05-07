@@ -9,6 +9,7 @@ import { type TransactionsQuery, api } from '@/lib/api';
 import { formatDelta } from '@/lib/format';
 import type { Category, TransactionListItem, TransactionListResponse } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
@@ -211,12 +212,12 @@ export function MovimientosClient() {
             >
               ↻ Sync
             </button>
-            <button
-              type="button"
+            <Link
+              href="/cuentas/importar"
               className="text-sm px-3 py-1.5 rounded bg-[var(--color-accent)] text-white"
             >
               ↑ Importar CSV
-            </button>
+            </Link>
           </>
         }
       />

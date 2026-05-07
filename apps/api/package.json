@@ -19,8 +19,10 @@
   "dependencies": {
     "@fastify/cors": "^10.0.1",
     "@fastify/jwt": "^9.0.3",
+    "@fastify/multipart": "^9.0.2",
     "@fastify/sensible": "^6.0.2",
     "@gp/shared": "workspace:*",
+    "csv-parse": "^5.6.0",
     "decimal.js": "^10.4.3",
     "dotenv": "^16.4.7",
     "drizzle-orm": "^0.38.4",
