@@ -29,8 +29,8 @@ Thumbs.db
 .idea/
 *.swp
 
-# Drizzle
-drizzle/meta/
+# Drizzle: commit migrations and meta (drizzle-kit needs the journal to track
+# applied migrations and the snapshot to compute diffs).
 
 # Coverage
 coverage/

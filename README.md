@@ -24,25 +24,48 @@ infra/
 
 ## Quick start (local development)
 
-Prerequisites: Node.js 22, pnpm 9, Docker.
+Prerequisites: Node.js 22, pnpm 9, PostgreSQL 16 or 17 (Docker optional).
 
 ```bash
-# Install workspace dependencies
+# 1. Install dependencies
 pnpm install
 
-# Start Postgres (only — api and web run on host for fast iteration)
-cd infra && docker compose up -d postgres
+# 2. Postgres
+# Either use Docker:
+cd infra && docker compose up -d postgres && cd ..
+# Or install Postgres 17 natively (Windows):
+#   winget install PostgreSQL.PostgreSQL.17 --silent --override "--mode unattended --superpassword postgres"
+# Then create the role and DB:
+#   psql -U postgres -h localhost -p 5433 -c "CREATE ROLE gp_user WITH LOGIN PASSWORD 'gp_password' CREATEDB;"
+#   psql -U postgres -h localhost -p 5433 -c "CREATE DATABASE gestionpatrimonial OWNER gp_user;"
 
-# Apply schema to the database
-cd .. && cp .env.example .env  # edit JWT_SECRET to be 32+ chars
-pnpm --filter @gp/api db:push
+# 3. Configure env
+cp .env.example .env
+# Make sure DATABASE_URL points to the right port (5432 docker / 5433 native PG 17 alongside an existing PG 16)
+# JWT_SECRET must be 32+ chars
 
-# Run api (port 8000) and web (port 3000) — open two terminals
+# 4. Apply schema and seed sample data
+pnpm --filter @gp/api db:migrate
+pnpm --filter @gp/api db:seed
+
+# 5. Run api (port 8000) and web (port 3000) — two terminals
 pnpm --filter @gp/api dev
 pnpm --filter @gp/web dev
 ```
 
-Visit `http://localhost:3000`. The dashboard lives at `/dashboard`.
+Visit `http://localhost:3000`. The dashboard lives at `/dashboard`,
+movimientos at `/cuentas/movimientos`.
+
+### Database scripts
+
+- `pnpm --filter @gp/api db:generate` — generate a new SQL migration from
+  current Drizzle schema diff.
+- `pnpm --filter @gp/api db:migrate` — apply pending migrations.
+- `pnpm --filter @gp/api db:push` — push schema directly (dev only,
+  bypasses migrations).
+- `pnpm --filter @gp/api db:seed` — wipe and reseed with the sample
+  dataset (4 institutions, 5 accounts, 14 categories, 33 transactions).
+- `pnpm --filter @gp/api db:studio` — open drizzle-kit studio web UI.
 
 ## Production deployment (OCI ARM A1)
 

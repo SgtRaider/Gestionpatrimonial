@@ -1,13 +1,13 @@
-import { transactionListQuerySchema } from '@gp/shared';
+import type { TransactionListItem } from '@gp/shared';
 import { Decimal } from 'decimal.js';
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import {
-  accountsFixture,
-  categoriesFixture,
-  getTransactionsFixture,
-  institutionsFixture,
-} from '../fixtures/transactions.js';
+import { db } from '../db/index.js';
+import { accounts, categories, institutions, transactionTags, transactions } from '../db/schema.js';
+
+// Single-user mode for now. Later derived from JWT.
+const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
 const queryStringSchema = z.object({
   from: z.string().date().optional(),
@@ -29,64 +29,142 @@ function asArray(v: string | string[] | undefined): string[] | undefined {
 export const transactionsRoutes: FastifyPluginAsync = async (app) => {
   app.get('/transactions', async (request) => {
     const parsed = queryStringSchema.parse(request.query);
-    const filters = {
-      ...parsed,
-      accountIds: asArray(parsed.accountIds),
-      categoryIds: asArray(parsed.categoryIds),
-    };
-    transactionListQuerySchema.partial().parse(filters);
+    const accountIds = asArray(parsed.accountIds);
+    const categoryIds = asArray(parsed.categoryIds);
 
-    let all = getTransactionsFixture();
-
-    const fromDate = filters.from;
-    if (fromDate) {
-      all = all.filter((t) => t.bookedAt.slice(0, 10) >= fromDate);
-    }
-    const toDate = filters.to;
-    if (toDate) {
-      all = all.filter((t) => t.bookedAt.slice(0, 10) <= toDate);
-    }
-    if (filters.accountIds && filters.accountIds.length > 0) {
-      all = all.filter((t) => filters.accountIds?.includes(t.accountId));
-    }
-    if (filters.categoryIds && filters.categoryIds.length > 0) {
-      all = all.filter((t) => t.categoryId && filters.categoryIds?.includes(t.categoryId));
-    }
-    if (filters.status) {
-      all = all.filter((t) => t.status === filters.status);
-    }
-    if (filters.uncategorized) {
-      all = all.filter((t) => t.categoryId === null);
-    }
-    if (filters.search) {
-      const q = filters.search.toLowerCase();
-      all = all.filter(
-        (t) =>
-          t.descriptionRaw.toLowerCase().includes(q) ||
-          (t.counterparty?.toLowerCase().includes(q) ?? false) ||
-          (t.normalizedMerchant?.toLowerCase().includes(q) ?? false) ||
-          (t.notes?.toLowerCase().includes(q) ?? false) ||
-          t.tags.some((tag) => tag.toLowerCase().includes(q)),
+    const conditions = [eq(transactions.userId, DEFAULT_USER_ID), isNull(transactions.deletedAt)];
+    if (parsed.from)
+      conditions.push(gte(transactions.bookedAt, new Date(`${parsed.from}T00:00:00Z`)));
+    if (parsed.to) conditions.push(lte(transactions.bookedAt, new Date(`${parsed.to}T23:59:59Z`)));
+    if (accountIds && accountIds.length > 0)
+      conditions.push(inArray(transactions.accountId, accountIds));
+    if (categoryIds && categoryIds.length > 0)
+      conditions.push(inArray(transactions.categoryId, categoryIds));
+    if (parsed.status) conditions.push(eq(transactions.status, parsed.status));
+    if (parsed.uncategorized) conditions.push(isNull(transactions.categoryId));
+    if (parsed.search) {
+      const pattern = `%${parsed.search}%`;
+      const searchClause = or(
+        ilike(transactions.descriptionRaw, pattern),
+        ilike(transactions.counterparty, pattern),
+        ilike(transactions.normalizedMerchant, pattern),
+        ilike(transactions.notes, pattern),
       );
+      if (searchClause) conditions.push(searchClause);
     }
+    const where = and(...conditions);
 
-    const summaryRows = all.filter((t) => t.transferPairId === null);
-    const income = summaryRows
-      .filter((t) => new Decimal(t.amount).isPositive())
-      .reduce((acc, t) => acc.plus(t.amount), new Decimal(0));
-    const expenses = summaryRows
-      .filter((t) => new Decimal(t.amount).isNegative())
-      .reduce((acc, t) => acc.plus(t.amount), new Decimal(0));
+    const offset = (parsed.page - 1) * parsed.pageSize;
 
-    const total = all.length;
-    const start = (filters.page - 1) * filters.pageSize;
-    const items = all.slice(start, start + filters.pageSize);
+    // Pull rows with joins (account+institution+category nested) and tags aggregated.
+    const rows = await db
+      .select({
+        id: transactions.id,
+        accountId: transactions.accountId,
+        bookedAt: transactions.bookedAt,
+        valueAt: transactions.valueAt,
+        amount: transactions.amount,
+        currency: transactions.currency,
+        amountBaseCurrency: transactions.amountBaseCurrency,
+        descriptionRaw: transactions.descriptionRaw,
+        counterparty: transactions.counterparty,
+        normalizedMerchant: transactions.normalizedMerchant,
+        merchantAliasUser: transactions.merchantAliasUser,
+        categoryId: transactions.categoryId,
+        status: transactions.status,
+        source: transactions.source,
+        transferPairId: transactions.transferPairId,
+        parentTransactionId: transactions.parentTransactionId,
+        recurringRuleId: transactions.recurringRuleId,
+        notes: transactions.notes,
+        isProjection: transactions.isProjection,
+        accountName: accounts.name,
+        accountIbanLast4: accounts.ibanLast4,
+        institutionName: institutions.name,
+        institutionColor: institutions.color,
+        catId: categories.id,
+        catParentId: categories.parentId,
+        catName: categories.name,
+        catKind: categories.kind,
+        catColor: categories.color,
+        catIconKey: categories.iconKey,
+        tags: sql<
+          string[]
+        >`COALESCE(array_agg(DISTINCT ${transactionTags.tag}) FILTER (WHERE ${transactionTags.tag} IS NOT NULL), '{}')`,
+      })
+      .from(transactions)
+      .innerJoin(accounts, eq(transactions.accountId, accounts.id))
+      .innerJoin(institutions, eq(accounts.institutionId, institutions.id))
+      .leftJoin(categories, eq(transactions.categoryId, categories.id))
+      .leftJoin(transactionTags, eq(transactionTags.transactionId, transactions.id))
+      .where(where)
+      .groupBy(transactions.id, accounts.id, institutions.id, categories.id)
+      .orderBy(desc(transactions.bookedAt), asc(transactions.id))
+      .limit(parsed.pageSize)
+      .offset(offset);
+
+    const items: TransactionListItem[] = rows.map((r) => ({
+      id: r.id,
+      accountId: r.accountId,
+      bookedAt: r.bookedAt.toISOString(),
+      valueAt: r.valueAt ? r.valueAt.toISOString() : null,
+      amount: r.amount,
+      currency: r.currency,
+      amountBaseCurrency: r.amountBaseCurrency,
+      descriptionRaw: r.descriptionRaw,
+      counterparty: r.counterparty,
+      normalizedMerchant: r.normalizedMerchant,
+      merchantAliasUser: r.merchantAliasUser,
+      categoryId: r.categoryId,
+      status: r.status,
+      source: r.source,
+      transferPairId: r.transferPairId,
+      parentTransactionId: r.parentTransactionId,
+      recurringRuleId: r.recurringRuleId,
+      notes: r.notes,
+      isProjection: r.isProjection,
+      accountName: r.accountName,
+      accountIbanLast4: r.accountIbanLast4,
+      institutionName: r.institutionName,
+      institutionColor: r.institutionColor,
+      category:
+        r.catId && r.catName && r.catKind
+          ? {
+              id: r.catId,
+              parentId: r.catParentId,
+              name: r.catName,
+              kind: r.catKind,
+              color: r.catColor,
+              iconKey: r.catIconKey,
+            }
+          : null,
+      tags: r.tags,
+    }));
+
+    // Total count (separate query — cheaper than counting joined rows).
+    const [countRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(where);
+    const total = countRow?.count ?? 0;
+
+    // Summary (excludes transfer pairs from income/expenses).
+    const summaryWhere = and(...conditions, isNull(transactions.transferPairId));
+    const [summaryRow] = await db
+      .select({
+        income: sql<string>`COALESCE(SUM(${transactions.amount}) FILTER (WHERE ${transactions.amount} > 0), 0)::text`,
+        expenses: sql<string>`COALESCE(SUM(${transactions.amount}) FILTER (WHERE ${transactions.amount} < 0), 0)::text`,
+      })
+      .from(transactions)
+      .where(summaryWhere);
+    const income = new Decimal(summaryRow?.income ?? '0');
+    const expenses = new Decimal(summaryRow?.expenses ?? '0');
 
     return {
       items,
       total,
-      page: filters.page,
-      pageSize: filters.pageSize,
+      page: parsed.page,
+      pageSize: parsed.pageSize,
       summary: {
         income: income.toFixed(2),
         expenses: expenses.toFixed(2),
@@ -96,23 +174,64 @@ export const transactionsRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.get('/accounts', async () =>
-    accountsFixture.map((a) => {
-      const ins = institutionsFixture.find((i) => i.id === a.institutionId);
-      if (!ins)
-        throw new Error(`Account ${a.id} references unknown institution ${a.institutionId}`);
-      return {
-        ...a,
-        institution: {
-          id: ins.id,
-          name: ins.name,
-          type: ins.type,
-          color: ins.color,
-          country: ins.country,
-        },
-      };
-    }),
-  );
+  app.get('/accounts', async () => {
+    const rows = await db
+      .select({
+        id: accounts.id,
+        institutionId: accounts.institutionId,
+        name: accounts.name,
+        type: accounts.type,
+        currency: accounts.currency,
+        ibanLast4: accounts.ibanLast4,
+        isActive: accounts.isActive,
+        institutionName: institutions.name,
+        institutionType: institutions.type,
+        institutionColor: institutions.color,
+        institutionCountry: institutions.country,
+      })
+      .from(accounts)
+      .innerJoin(institutions, eq(accounts.institutionId, institutions.id))
+      .where(
+        and(
+          eq(accounts.userId, DEFAULT_USER_ID),
+          eq(accounts.isActive, true),
+          isNull(accounts.deletedAt),
+        ),
+      )
+      .orderBy(asc(institutions.name), asc(accounts.name));
 
-  app.get('/categories', async () => categoriesFixture);
+    return rows.map((r) => ({
+      id: r.id,
+      institutionId: r.institutionId,
+      name: r.name,
+      type: r.type,
+      currency: r.currency,
+      ibanLast4: r.ibanLast4,
+      isActive: r.isActive,
+      institution: {
+        id: r.institutionId,
+        name: r.institutionName,
+        type: r.institutionType,
+        color: r.institutionColor,
+        country: r.institutionCountry,
+      },
+    }));
+  });
+
+  app.get('/categories', async () => {
+    const rows = await db
+      .select({
+        id: categories.id,
+        parentId: categories.parentId,
+        name: categories.name,
+        kind: categories.kind,
+        color: categories.color,
+        iconKey: categories.iconKey,
+      })
+      .from(categories)
+      .where(and(eq(categories.userId, DEFAULT_USER_ID), isNull(categories.deletedAt)))
+      .orderBy(asc(categories.name));
+
+    return rows;
+  });
 };
