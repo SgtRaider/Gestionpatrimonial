@@ -7,6 +7,7 @@ import { formatEur } from '@/lib/format';
 import type { RecurringKind, RecurringRuleEnriched } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { EditRecurringDialog } from './edit-recurring-dialog';
 
 const KIND_LABELS: Record<RecurringKind, string> = {
   subscription: 'Suscripción',
@@ -35,6 +36,7 @@ function formatShortDate(iso: string | null): string {
 export function RecurrentesClient() {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState<RecurringRuleEnriched | null>(null);
+  const [editing, setEditing] = useState<RecurringRuleEnriched | null>(null);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['recurring-rules'],
@@ -48,6 +50,19 @@ export function RecurrentesClient() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setConfirming(null);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({
+      id,
+      patch,
+    }: { id: string; patch: Parameters<typeof api.updateRecurringRule>[1] }) =>
+      api.updateRecurringRule(id, patch),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recurring-rules'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setEditing(null);
     },
   });
 
@@ -100,10 +115,20 @@ export function RecurrentesClient() {
       ) : (
         <>
           {sortedOutflows.length > 0 ? (
-            <RuleSection title="Salidas" rules={sortedOutflows} onDelete={setConfirming} />
+            <RuleSection
+              title="Salidas"
+              rules={sortedOutflows}
+              onDelete={setConfirming}
+              onEdit={setEditing}
+            />
           ) : null}
           {sortedInflows.length > 0 ? (
-            <RuleSection title="Entradas" rules={sortedInflows} onDelete={setConfirming} />
+            <RuleSection
+              title="Entradas"
+              rules={sortedInflows}
+              onDelete={setConfirming}
+              onEdit={setEditing}
+            />
           ) : null}
         </>
       )}
@@ -114,6 +139,15 @@ export function RecurrentesClient() {
           isPending={deleteMutation.isPending}
           onConfirm={() => deleteMutation.mutate(confirming.id)}
           onDismiss={() => setConfirming(null)}
+        />
+      ) : null}
+
+      {editing ? (
+        <EditRecurringDialog
+          rule={editing}
+          isPending={updateMutation.isPending}
+          onConfirm={(patch) => updateMutation.mutate({ id: editing.id, patch })}
+          onDismiss={() => setEditing(null)}
         />
       ) : null}
     </div>
@@ -159,10 +193,12 @@ function RuleSection({
   title,
   rules,
   onDelete,
+  onEdit,
 }: {
   title: string;
   rules: RecurringRuleEnriched[];
   onDelete: (rule: RecurringRuleEnriched) => void;
+  onEdit: (rule: RecurringRuleEnriched) => void;
 }) {
   return (
     <section className="space-y-2">
@@ -179,14 +215,17 @@ function RuleSection({
               <th className="text-center px-3 py-2 font-medium w-16">Cargos</th>
               <th className="text-left px-3 py-2 font-medium w-20">Último</th>
               <th className="text-left px-3 py-2 font-medium w-20">Próximo</th>
-              <th className="text-center px-3 py-2 font-medium w-12" aria-label="acciones" />
+              <th className="text-center px-3 py-2 font-medium w-20" aria-label="acciones" />
             </tr>
           </thead>
           <tbody>
             {rules.map((r) => (
               <tr
                 key={r.id}
-                className="border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30"
+                className={cn(
+                  'border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30',
+                  r.status !== 'active' && 'opacity-60',
+                )}
               >
                 <td className="px-3 py-2">
                   <div className="font-medium flex items-center gap-1.5 flex-wrap">
@@ -205,6 +244,16 @@ function RuleSection({
                         title="Importe variable — los cargos pueden cambiar mes a mes"
                       >
                         variable
+                      </span>
+                    ) : null}
+                    {r.status === 'paused' ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        pausada
+                      </span>
+                    ) : null}
+                    {r.status === 'cancelled' ? (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-negative)]/15 text-[var(--color-negative)]">
+                        cancelada
                       </span>
                     ) : null}
                   </div>
@@ -234,15 +283,26 @@ function RuleSection({
                   {formatShortDate(r.nextExpectedAt)}
                 </td>
                 <td className="px-3 py-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => onDelete(r)}
-                    aria-label={`Eliminar regla ${r.name}`}
-                    title="Eliminar"
-                    className="text-[var(--color-muted)] hover:text-[var(--color-negative)]"
-                  >
-                    🗑
-                  </button>
+                  <div className="flex items-center justify-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onEdit(r)}
+                      aria-label={`Editar regla ${r.name}`}
+                      title="Editar"
+                      className="text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(r)}
+                      aria-label={`Eliminar regla ${r.name}`}
+                      title="Eliminar"
+                      className="text-[var(--color-muted)] hover:text-[var(--color-negative)]"
+                    >
+                      🗑
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}

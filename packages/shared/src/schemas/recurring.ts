@@ -79,3 +79,16 @@ export const deleteRecurringRuleResponseSchema = z.object({
   unlinkedCount: z.number().int().nonnegative(),
 });
 export type DeleteRecurringRuleResponse = z.infer<typeof deleteRecurringRuleResponseSchema>;
+
+export const updateRecurringRuleInputSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    kind: recurringKindSchema,
+    frequency: recurringFrequencySchema,
+    amountKind: recurringAmountKindSchema,
+    expectedAmount: decimalString,
+    status: recurringStatusSchema,
+    notes: z.string().max(2000).nullable(),
+  })
+  .partial();
+export type UpdateRecurringRuleInput = z.infer<typeof updateRecurringRuleInputSchema>;

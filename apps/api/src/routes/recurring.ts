@@ -7,6 +7,7 @@ import {
   type UnlinkRecurringResponse,
   markRecurringInputSchema,
   unlinkRecurringInputSchema,
+  updateRecurringRuleInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
@@ -264,6 +265,76 @@ export const recurringRoutes: FastifyPluginAsync = async (app) => {
       },
     };
     return response;
+  });
+
+  // Patch a rule's editable fields. Recomputes `nextExpectedAt` from the last
+  // booked charge when frequency changes, so cycle dates stay coherent.
+  app.patch('/recurring-rules/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = updateRecurringRuleInputSchema.parse(request.body);
+
+    if (Object.keys(body).length === 0) {
+      return reply.code(400).send({ error: 'Empty patch' });
+    }
+
+    const [existing] = await db
+      .select()
+      .from(recurringRules)
+      .where(
+        and(
+          eq(recurringRules.id, params.id),
+          eq(recurringRules.userId, DEFAULT_USER_ID),
+          isNull(recurringRules.deletedAt),
+        ),
+      );
+    if (!existing) {
+      return reply.code(404).send({ error: 'Regla no encontrada' });
+    }
+
+    const updateFields: Record<string, unknown> = { updatedAt: new Date() };
+    if ('name' in body && body.name !== undefined) updateFields.name = body.name;
+    if ('kind' in body && body.kind !== undefined) updateFields.kind = body.kind;
+    if ('frequency' in body && body.frequency !== undefined) {
+      updateFields.frequency = body.frequency;
+    }
+    if ('amountKind' in body && body.amountKind !== undefined) {
+      updateFields.amountKind = body.amountKind;
+    }
+    if ('expectedAmount' in body && body.expectedAmount !== undefined) {
+      updateFields.expectedAmount = body.expectedAmount;
+    }
+    if ('status' in body && body.status !== undefined) updateFields.status = body.status;
+    if ('notes' in body) updateFields.notes = body.notes;
+
+    // If the frequency changed, refresh nextExpectedAt from the last linked
+    // charge so projections stay aligned with the new cadence.
+    if (body.frequency && body.frequency !== existing.frequency) {
+      const [lastCharge] = await db
+        .select({ bookedAt: transactions.bookedAt })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.recurringRuleId, params.id),
+            eq(transactions.userId, DEFAULT_USER_ID),
+            isNull(transactions.deletedAt),
+          ),
+        )
+        .orderBy(desc(transactions.bookedAt))
+        .limit(1);
+      const baseDate = lastCharge?.bookedAt ?? new Date();
+      updateFields.nextExpectedAt = computeNextExpectedAt(baseDate, body.frequency);
+    }
+
+    const [updated] = await db
+      .update(recurringRules)
+      .set(updateFields)
+      .where(and(eq(recurringRules.id, params.id), eq(recurringRules.userId, DEFAULT_USER_ID)))
+      .returning();
+
+    if (!updated) {
+      return reply.code(500).send({ error: 'No se pudo actualizar la regla' });
+    }
+    return toRecurringRule(updated);
   });
 
   // Soft-delete a rule and unlink all its transactions in one step. The unlink

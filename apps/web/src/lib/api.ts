@@ -16,11 +16,13 @@ import {
   type MarkRecurringResponse,
   type PrepaymentSimulationInput,
   type PrepaymentSimulationResponse,
+  type RecurringRule,
   type RecurringRulesListResponse,
   type TransactionListResponse,
   type TransactionPatch,
   type UnlinkRecurringInput,
   type UnlinkRecurringResponse,
+  type UpdateRecurringRuleInput,
   accountWithInstitutionSchema,
   bulkCategorizeResponseSchema,
   categorySchema,
@@ -33,6 +35,7 @@ import {
   loanSummarySchema,
   markRecurringResponseSchema,
   prepaymentSimulationResponseSchema,
+  recurringRuleSchema,
   recurringRulesListResponseSchema,
   transactionListResponseSchema,
   unlinkRecurringResponseSchema,
@@ -172,6 +175,9 @@ export const api = {
     send('DELETE', `/api/recurring-rules/${id}`, undefined, (raw) =>
       deleteRecurringRuleResponseSchema.parse(raw),
     ),
+
+  updateRecurringRule: (id: string, patch: UpdateRecurringRuleInput): Promise<RecurringRule> =>
+    send('PATCH', `/api/recurring-rules/${id}`, patch, (raw) => recurringRuleSchema.parse(raw)),
 
   importTransactionsPreview: async (args: {
     file: File;
