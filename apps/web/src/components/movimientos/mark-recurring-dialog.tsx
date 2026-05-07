@@ -99,7 +99,9 @@ export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDism
   return (
     <dialog
       open
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 w-full h-full max-w-none max-h-none p-4"
+      aria-modal="true"
+      aria-labelledby="mark-recurring-title"
+      className="fixed inset-0 z-50 m-0 w-screen h-screen max-w-none max-h-none flex items-center justify-center bg-black/40 p-4 text-[var(--color-fg)]"
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
       }}
@@ -107,10 +109,16 @@ export function MarkRecurringDialog({ transactions, isPending, onConfirm, onDism
         if (e.key === 'Escape') onDismiss();
       }}
     >
-      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl shadow-xl w-full max-w-lg p-5 space-y-4">
+      <div
+        className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl shadow-2xl w-full max-w-lg p-5 space-y-4"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-lg font-semibold">Marcar como recurrente</h3>
+            <h3 id="mark-recurring-title" className="text-lg font-semibold">
+              Marcar como recurrente
+            </h3>
             <p className="text-xs text-[var(--color-muted)] mt-0.5">
               {transactions.length === 1
                 ? '1 movimiento se vinculará a esta regla.'
