@@ -179,6 +179,16 @@ export const api = {
   updateRecurringRule: (id: string, patch: UpdateRecurringRuleInput): Promise<RecurringRule> =>
     send('PATCH', `/api/recurring-rules/${id}`, patch, (raw) => recurringRuleSchema.parse(raw)),
 
+  dismissInsight: (id: string): Promise<{ id: string; ok: boolean }> =>
+    send('POST', `/api/insights/${id}/dismiss`, undefined, (raw) =>
+      z.object({ id: z.string().uuid(), ok: z.boolean() }).parse(raw),
+    ),
+
+  actInsight: (id: string): Promise<{ id: string; ok: boolean }> =>
+    send('POST', `/api/insights/${id}/act`, undefined, (raw) =>
+      z.object({ id: z.string().uuid(), ok: z.boolean() }).parse(raw),
+    ),
+
   importTransactionsPreview: async (args: {
     file: File;
     accountId: string;
