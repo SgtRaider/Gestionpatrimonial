@@ -10,7 +10,8 @@ import { formatEur, formatPct } from '@/lib/format';
 import type { LoanDetail } from '@gp/shared';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 const SCHEDULE_PAGE_SIZE = 50;
 
@@ -58,6 +59,13 @@ function Body({ loan }: { loan: LoanDetail }) {
   });
   const [showPrepayment, setShowPrepayment] = useState(false);
   const [showInvestCompare, setShowInvestCompare] = useState(false);
+
+  // Auto-open the simulator when arriving from a `mortgage_vs_invest` insight.
+  const searchParams = useSearchParams();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: open once on mount; re-running on later searchParams changes would yank the dialog open whenever the user tweaks unrelated query state.
+  useEffect(() => {
+    if (searchParams.get('simulate') === 'invest') setShowInvestCompare(true);
+  }, []);
 
   const principalInitial = Number(loan.principalInitial);
   const outstandingNow = Number(loan.outstanding);

@@ -354,14 +354,27 @@ async function computeInsights(userId: string): Promise<Dashboard['insights']> {
     .orderBy(desc(insightsTable.estimatedSavings))
     .limit(5);
 
-  return rows.map((r) => ({
-    id: r.id,
-    kind: r.kind,
-    title: r.title,
-    description: r.description,
-    estimatedSavings: r.estimatedSavings,
-    actionable: r.actionPayload !== null,
-  }));
+  return rows.map((r) => {
+    const raw = (r.actionPayload as Record<string, unknown> | null) ?? null;
+    const surfaced = raw
+      ? {
+          ...(typeof raw.loanId === 'string' ? { loanId: raw.loanId } : {}),
+          ...(typeof raw.ruleId === 'string' ? { ruleId: raw.ruleId } : {}),
+          ...(typeof raw.accountId === 'string' ? { accountId: raw.accountId } : {}),
+          ...(typeof raw.merchant === 'string' ? { merchant: raw.merchant } : {}),
+          ...(typeof raw.cadence === 'string' ? { cadence: raw.cadence } : {}),
+        }
+      : null;
+    return {
+      id: r.id,
+      kind: r.kind,
+      title: r.title,
+      description: r.description,
+      estimatedSavings: r.estimatedSavings,
+      actionable: r.actionPayload !== null,
+      actionPayload: surfaced,
+    };
+  });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

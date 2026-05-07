@@ -59,6 +59,19 @@ export const upcomingEventSchema = z.object({
 });
 export type UpcomingEvent = z.infer<typeof upcomingEventSchema>;
 
+// Subset of the persisted `action_payload` we surface to the UI so it can
+// build deep-link CTAs. New keys are added when a detector emits them.
+export const insightActionPayloadSchema = z
+  .object({
+    loanId: z.string().uuid(),
+    ruleId: z.string().uuid(),
+    accountId: z.string().uuid(),
+    merchant: z.string(),
+    cadence: z.string(),
+  })
+  .partial();
+export type InsightActionPayload = z.infer<typeof insightActionPayloadSchema>;
+
 export const dashboardInsightSchema = z.object({
   id: z.string().uuid(),
   kind: z.string(),
@@ -66,6 +79,7 @@ export const dashboardInsightSchema = z.object({
   description: z.string().nullable(),
   estimatedSavings: decimalString.nullable(),
   actionable: z.boolean(),
+  actionPayload: insightActionPayloadSchema.nullable(),
 });
 export type DashboardInsight = z.infer<typeof dashboardInsightSchema>;
 

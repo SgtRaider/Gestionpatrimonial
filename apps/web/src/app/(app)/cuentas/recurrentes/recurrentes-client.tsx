@@ -6,7 +6,8 @@ import { cn } from '@/lib/cn';
 import { formatEur } from '@/lib/format';
 import type { RecurringKind, RecurringRuleEnriched } from '@gp/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import { EditRecurringDialog } from './edit-recurring-dialog';
 
 const KIND_LABELS: Record<RecurringKind, string> = {
@@ -35,6 +36,8 @@ function formatShortDate(iso: string | null): string {
 
 export function RecurrentesClient() {
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get('highlight');
   const [confirming, setConfirming] = useState<RecurringRuleEnriched | null>(null);
   const [editing, setEditing] = useState<RecurringRuleEnriched | null>(null);
 
@@ -118,6 +121,7 @@ export function RecurrentesClient() {
             <RuleSection
               title="Salidas"
               rules={sortedOutflows}
+              highlightId={highlightId}
               onDelete={setConfirming}
               onEdit={setEditing}
             />
@@ -126,6 +130,7 @@ export function RecurrentesClient() {
             <RuleSection
               title="Entradas"
               rules={sortedInflows}
+              highlightId={highlightId}
               onDelete={setConfirming}
               onEdit={setEditing}
             />
@@ -192,11 +197,13 @@ function EmptyState() {
 function RuleSection({
   title,
   rules,
+  highlightId,
   onDelete,
   onEdit,
 }: {
   title: string;
   rules: RecurringRuleEnriched[];
+  highlightId: string | null;
   onDelete: (rule: RecurringRuleEnriched) => void;
   onEdit: (rule: RecurringRuleEnriched) => void;
 }) {
@@ -220,96 +227,128 @@ function RuleSection({
           </thead>
           <tbody>
             {rules.map((r) => (
-              <tr
+              <RuleRow
                 key={r.id}
-                className={cn(
-                  'border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30',
-                  r.status !== 'active' && 'opacity-60',
-                )}
-              >
-                <td className="px-3 py-2">
-                  <div className="font-medium flex items-center gap-1.5 flex-wrap">
-                    <span>{r.name}</span>
-                    {r.detectedAutomatically ? (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
-                        title="Detectada automáticamente"
-                      >
-                        auto
-                      </span>
-                    ) : null}
-                    {r.amountKind === 'variable' ? (
-                      <span
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-muted)]/15 text-[var(--color-muted)]"
-                        title="Importe variable — los cargos pueden cambiar mes a mes"
-                      >
-                        variable
-                      </span>
-                    ) : null}
-                    {r.status === 'paused' ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">
-                        pausada
-                      </span>
-                    ) : null}
-                    {r.status === 'cancelled' ? (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-negative)]/15 text-[var(--color-negative)]">
-                        cancelada
-                      </span>
-                    ) : null}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-[var(--color-muted)]">{KIND_LABELS[r.kind]}</td>
-                <td className="px-3 py-2 text-[var(--color-muted)]">
-                  {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
-                </td>
-                <td className="px-3 py-2 text-right tabular-nums">
-                  {r.amountKind === 'variable' ? '≈ ' : ''}
-                  {formatEur(r.expectedAmount)}
-                </td>
-                <td
-                  className={cn(
-                    'px-3 py-2 text-right tabular-nums font-medium',
-                    r.kind === 'salary' ? 'text-[var(--color-positive)]' : 'text-[var(--color-fg)]',
-                  )}
-                >
-                  {r.amountKind === 'variable' ? '≈ ' : ''}
-                  {formatEur(r.annualCost, { compact: true })}
-                </td>
-                <td className="px-3 py-2 text-center text-[var(--color-muted)]">{r.linkedCount}</td>
-                <td className="px-3 py-2 text-[var(--color-muted)] whitespace-nowrap">
-                  {formatShortDate(r.lastChargedAt)}
-                </td>
-                <td className="px-3 py-2 text-[var(--color-muted)] whitespace-nowrap">
-                  {formatShortDate(r.nextExpectedAt)}
-                </td>
-                <td className="px-3 py-2 text-center">
-                  <div className="flex items-center justify-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => onEdit(r)}
-                      aria-label={`Editar regla ${r.name}`}
-                      title="Editar"
-                      className="text-[var(--color-muted)] hover:text-[var(--color-fg)]"
-                    >
-                      ✏️
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDelete(r)}
-                      aria-label={`Eliminar regla ${r.name}`}
-                      title="Eliminar"
-                      className="text-[var(--color-muted)] hover:text-[var(--color-negative)]"
-                    >
-                      🗑
-                    </button>
-                  </div>
-                </td>
-              </tr>
+                rule={r}
+                isHighlighted={highlightId === r.id}
+                onDelete={onDelete}
+                onEdit={onEdit}
+              />
             ))}
           </tbody>
         </table>
       </div>
     </section>
+  );
+}
+
+function RuleRow({
+  rule: r,
+  isHighlighted,
+  onDelete,
+  onEdit,
+}: {
+  rule: RecurringRuleEnriched;
+  isHighlighted: boolean;
+  onDelete: (rule: RecurringRuleEnriched) => void;
+  onEdit: (rule: RecurringRuleEnriched) => void;
+}) {
+  const ref = useRef<HTMLTableRowElement | null>(null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll once on initial highlight match; re-running on later renders would tear focus away while the user reads.
+  useEffect(() => {
+    if (isHighlighted && ref.current) {
+      ref.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, []);
+
+  return (
+    <tr
+      ref={ref}
+      className={cn(
+        'border-t border-[var(--color-border)] hover:bg-[var(--color-bg)]/30 transition-colors',
+        r.status !== 'active' && 'opacity-60',
+        isHighlighted && 'bg-[var(--color-accent)]/15',
+      )}
+    >
+      <td className="px-3 py-2">
+        <div className="font-medium flex items-center gap-1.5 flex-wrap">
+          <span>{r.name}</span>
+          {r.detectedAutomatically ? (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-accent)]/15 text-[var(--color-accent)]"
+              title="Detectada automáticamente"
+            >
+              auto
+            </span>
+          ) : null}
+          {r.amountKind === 'variable' ? (
+            <span
+              className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-muted)]/15 text-[var(--color-muted)]"
+              title="Importe variable — los cargos pueden cambiar mes a mes"
+            >
+              variable
+            </span>
+          ) : null}
+          {r.status === 'paused' ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400">
+              pausada
+            </span>
+          ) : null}
+          {r.status === 'cancelled' ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-negative)]/15 text-[var(--color-negative)]">
+              cancelada
+            </span>
+          ) : null}
+        </div>
+      </td>
+      <td className="px-3 py-2 text-[var(--color-muted)]">{KIND_LABELS[r.kind]}</td>
+      <td className="px-3 py-2 text-[var(--color-muted)]">
+        {FREQUENCY_LABELS[r.frequency] ?? r.frequency}
+      </td>
+      <td className="px-3 py-2 text-right tabular-nums">
+        {r.amountKind === 'variable' ? '≈ ' : ''}
+        {formatEur(r.expectedAmount)}
+      </td>
+      <td
+        className={cn(
+          'px-3 py-2 text-right tabular-nums font-medium',
+          r.kind === 'salary' ? 'text-[var(--color-positive)]' : 'text-[var(--color-fg)]',
+        )}
+      >
+        {r.amountKind === 'variable' ? '≈ ' : ''}
+        {formatEur(r.annualCost, { compact: true })}
+      </td>
+      <td className="px-3 py-2 text-center text-[var(--color-muted)]">{r.linkedCount}</td>
+      <td className="px-3 py-2 text-[var(--color-muted)] whitespace-nowrap">
+        {formatShortDate(r.lastChargedAt)}
+      </td>
+      <td className="px-3 py-2 text-[var(--color-muted)] whitespace-nowrap">
+        {formatShortDate(r.nextExpectedAt)}
+      </td>
+      <td className="px-3 py-2 text-center">
+        <div className="flex items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={() => onEdit(r)}
+            aria-label={`Editar regla ${r.name}`}
+            title="Editar"
+            className="text-[var(--color-muted)] hover:text-[var(--color-fg)]"
+          >
+            ✏️
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(r)}
+            aria-label={`Eliminar regla ${r.name}`}
+            title="Eliminar"
+            className="text-[var(--color-muted)] hover:text-[var(--color-negative)]"
+          >
+            🗑
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 

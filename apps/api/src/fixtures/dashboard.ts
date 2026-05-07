@@ -136,6 +136,7 @@ export const dashboardFixture: Dashboard = {
       description: 'Ahorro estimado: 47 €/mes',
       estimatedSavings: '564.00',
       actionable: true,
+      actionPayload: null,
     },
     {
       id: '01951b00-0000-7000-8000-000000000002',
@@ -144,6 +145,7 @@ export const dashboardFixture: Dashboard = {
       description: 'Oportunidad: ~540 €/año en monetario',
       estimatedSavings: '540.00',
       actionable: true,
+      actionPayload: null,
     },
     {
       id: '01951b00-0000-7000-8000-000000000003',
@@ -152,6 +154,7 @@ export const dashboardFixture: Dashboard = {
       description: 'Resto hipoteca a tipo variable 3,52%',
       estimatedSavings: '1800.00',
       actionable: true,
+      actionPayload: null,
     },
   ],
   alerts: [
