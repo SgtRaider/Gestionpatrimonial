@@ -1,10 +1,14 @@
 import {
   type AccountWithInstitution,
   type Category,
+  type CreateCategorizationRuleInput,
+  type CreateCategorizationRuleResponse,
   type Dashboard,
   type TransactionListResponse,
+  type TransactionPatch,
   accountWithInstitutionSchema,
   categorySchema,
+  createCategorizationRuleResponseSchema,
   dashboardSchema,
   transactionListResponseSchema,
 } from '@gp/shared';
@@ -23,6 +27,28 @@ async function get<T>(path: string, parser: (raw: unknown) => T): Promise<T> {
   const json: unknown = await res.json();
   return parser(json);
 }
+
+async function send<T>(
+  method: 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body: unknown,
+  parser: (raw: unknown) => T,
+): Promise<T> {
+  const init: RequestInit = {
+    method,
+    headers: { 'content-type': 'application/json' },
+  };
+  if (body !== undefined) init.body = JSON.stringify(body);
+  const res = await fetch(`${API_URL}${path}`, init);
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`API ${path} ${method} returned ${res.status}: ${text}`);
+  }
+  const json: unknown = await res.json();
+  return parser(json);
+}
+
+const patchTransactionResponseSchema = z.object({ id: z.string().uuid(), ok: z.boolean() });
 
 function buildQuery(params: Record<string, string | string[] | undefined>): string {
   const sp = new URLSearchParams();
@@ -74,4 +100,16 @@ export const api = {
 
   getCategories: (): Promise<Category[]> =>
     get('/api/categories', (raw) => z.array(categorySchema).parse(raw)),
+
+  patchTransaction: (id: string, patch: TransactionPatch) =>
+    send('PATCH', `/api/transactions/${id}`, patch, (raw) =>
+      patchTransactionResponseSchema.parse(raw),
+    ),
+
+  createCategorizationRule: (
+    input: CreateCategorizationRuleInput,
+  ): Promise<CreateCategorizationRuleResponse> =>
+    send('POST', '/api/categorization-rules', input, (raw) =>
+      createCategorizationRuleResponseSchema.parse(raw),
+    ),
 };

@@ -1,4 +1,4 @@
-import type { TransactionListItem } from '@gp/shared';
+import { type TransactionListItem, transactionPatchSchema } from '@gp/shared';
 import { Decimal } from 'decimal.js';
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
@@ -216,6 +216,48 @@ export const transactionsRoutes: FastifyPluginAsync = async (app) => {
         country: r.institutionCountry,
       },
     }));
+  });
+
+  app.patch('/transactions/:id', async (request, reply) => {
+    const params = z.object({ id: z.string().uuid() }).parse(request.params);
+    const body = transactionPatchSchema.parse(request.body);
+
+    if (Object.keys(body).length === 0) {
+      return reply.code(400).send({ error: 'Empty patch' });
+    }
+
+    const updateFields: Record<string, unknown> = { updatedAt: new Date() };
+    if ('categoryId' in body) updateFields.categoryId = body.categoryId;
+    if ('notes' in body) updateFields.notes = body.notes;
+    if ('merchantAliasUser' in body) updateFields.merchantAliasUser = body.merchantAliasUser;
+
+    const updated = await db
+      .update(transactions)
+      .set(updateFields)
+      .where(
+        and(
+          eq(transactions.id, params.id),
+          eq(transactions.userId, DEFAULT_USER_ID),
+          isNull(transactions.deletedAt),
+        ),
+      )
+      .returning({ id: transactions.id });
+
+    if (updated.length === 0) {
+      return reply.code(404).send({ error: 'Transaction not found' });
+    }
+
+    // Replace tags wholesale if provided.
+    if (body.tags) {
+      await db.delete(transactionTags).where(eq(transactionTags.transactionId, params.id));
+      if (body.tags.length > 0) {
+        await db
+          .insert(transactionTags)
+          .values(body.tags.map((tag) => ({ transactionId: params.id, tag })));
+      }
+    }
+
+    return { id: params.id, ok: true };
   });
 
   app.get('/categories', async () => {

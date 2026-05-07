@@ -2,7 +2,8 @@
 
 import { cn } from '@/lib/cn';
 import { formatDelta, isPositive } from '@/lib/format';
-import type { TransactionListItem } from '@gp/shared';
+import type { Category, TransactionListItem } from '@gp/shared';
+import { CategoryCell } from './category-cell';
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString('es-ES', {
@@ -20,12 +21,16 @@ function statusIcon(t: TransactionListItem): string {
 
 export function TransactionsTable({
   items,
+  categories,
   selectedId,
   onSelect,
+  onCategoryChange,
 }: {
   items: TransactionListItem[];
+  categories: Category[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onCategoryChange: (tx: TransactionListItem, newCategoryId: string | null) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
@@ -94,22 +99,16 @@ export function TransactionsTable({
                       {t.descriptionRaw}
                     </div>
                   </td>
-                  <td className="px-3 py-2">
-                    {t.category ? (
-                      <span
-                        className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs"
-                        style={{
-                          background: `${t.category.color ?? '#999'}20`,
-                          color: t.category.color ?? '#999',
-                        }}
-                      >
-                        {t.category.name}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-[var(--color-muted)] italic">
-                        Sin categorizar
-                      </span>
-                    )}
+                  <td
+                    className="px-3 py-2"
+                    onClick={(e) => e.stopPropagation()}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    <CategoryCell
+                      tx={t}
+                      categories={categories}
+                      onChange={(id) => onCategoryChange(t, id)}
+                    />
                   </td>
                   <td
                     className={cn(

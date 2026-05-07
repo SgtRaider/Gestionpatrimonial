@@ -2,6 +2,7 @@ import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import Fastify from 'fastify';
 import { config } from './config.js';
+import { categorizationRulesRoutes } from './routes/categorization-rules.js';
 import { dashboardRoutes } from './routes/dashboard.js';
 import { healthRoutes } from './routes/health.js';
 import { transactionsRoutes } from './routes/transactions.js';
@@ -22,6 +23,7 @@ async function buildServer() {
   await app.register(healthRoutes);
   await app.register(dashboardRoutes, { prefix: '/api' });
   await app.register(transactionsRoutes, { prefix: '/api' });
+  await app.register(categorizationRulesRoutes, { prefix: '/api' });
 
   return app;
 }

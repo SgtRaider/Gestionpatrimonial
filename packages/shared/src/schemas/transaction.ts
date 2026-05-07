@@ -62,6 +62,48 @@ export const transactionListItemSchema = transactionSchema.extend({
 });
 export type TransactionListItem = z.infer<typeof transactionListItemSchema>;
 
+export const transactionPatchSchema = z
+  .object({
+    categoryId: z.string().uuid().nullable(),
+    notes: z.string().max(2000).nullable(),
+    merchantAliasUser: z.string().max(200).nullable(),
+    tags: z.array(z.string().max(50)),
+  })
+  .partial();
+export type TransactionPatch = z.infer<typeof transactionPatchSchema>;
+
+export const categorizationRuleSchema = z.object({
+  id: z.string().uuid(),
+  patternRegex: z.string(),
+  categoryId: z.string().uuid(),
+  accountId: z.string().uuid().nullable(),
+  amountMin: decimalString.nullable(),
+  amountMax: decimalString.nullable(),
+  priority: z.number().int(),
+  active: z.boolean(),
+});
+export type CategorizationRule = z.infer<typeof categorizationRuleSchema>;
+
+export const createCategorizationRuleSchema = z.object({
+  patternRegex: z.string().min(1).max(500),
+  categoryId: z.string().uuid(),
+  accountId: z.string().uuid().nullable().optional(),
+  amountMin: decimalString.optional(),
+  amountMax: decimalString.optional(),
+  priority: z.number().int().optional(),
+  applyToExisting: z.boolean().optional(),
+  suggestedFromTransactionId: z.string().uuid().optional(),
+});
+export type CreateCategorizationRuleInput = z.infer<typeof createCategorizationRuleSchema>;
+
+export const createCategorizationRuleResponseSchema = z.object({
+  rule: categorizationRuleSchema,
+  appliedToCount: z.number().int().nonnegative(),
+});
+export type CreateCategorizationRuleResponse = z.infer<
+  typeof createCategorizationRuleResponseSchema
+>;
+
 export const transactionListResponseSchema = z.object({
   items: z.array(transactionListItemSchema),
   total: z.number().int().nonnegative(),

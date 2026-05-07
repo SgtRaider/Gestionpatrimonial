@@ -1,19 +1,39 @@
 'use client';
 
 import { PageHeader } from '@/components/layout/page-header';
+import { CreateRuleDialog } from '@/components/movimientos/create-rule-dialog';
 import { TransactionDetail } from '@/components/movimientos/transaction-detail';
 import { TransactionsTable } from '@/components/movimientos/transactions-table';
 import { TransactionsToolbar } from '@/components/movimientos/transactions-toolbar';
 import { type TransactionsQuery, api } from '@/lib/api';
-import { formatDelta, formatEur } from '@/lib/format';
-import { useQuery } from '@tanstack/react-query';
+import { formatDelta } from '@/lib/format';
+import type { Category, TransactionListItem, TransactionListResponse } from '@gp/shared';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMemo, useState } from 'react';
+
+type PendingRule = {
+  tx: TransactionListItem;
+  category: Category;
+  suggestedRegex: string;
+};
+
+function suggestPatternFromDescription(description: string): string {
+  const stripped = description
+    .replace(/\d{2,}/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const firstWord = stripped.split(/\s+/)[0];
+  return firstWord && firstWord.length >= 3 ? firstWord : stripped;
+}
 
 export function MovimientosClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pendingRule, setPendingRule] = useState<PendingRule | null>(null);
+  const [toast, setToast] = useState<{ message: string; tone: 'success' | 'error' } | null>(null);
 
   const query: TransactionsQuery = useMemo(() => {
     const q: TransactionsQuery = {
@@ -51,6 +71,84 @@ export function MovimientosClient() {
     queryFn: () => api.getTransactions(query),
     placeholderData: (prev) => prev,
   });
+
+  const categoryById = useMemo(() => {
+    const map = new Map<string, Category>();
+    for (const c of categoriesQuery.data ?? []) map.set(c.id, c);
+    return map;
+  }, [categoriesQuery.data]);
+
+  const patchMutation = useMutation({
+    mutationFn: ({ id, categoryId }: { id: string; categoryId: string | null }) =>
+      api.patchTransaction(id, { categoryId }),
+    onMutate: async ({ id, categoryId }) => {
+      await queryClient.cancelQueries({ queryKey: ['transactions'] });
+      const snapshot = queryClient.getQueriesData<TransactionListResponse>({
+        queryKey: ['transactions'],
+      });
+      queryClient.setQueriesData<TransactionListResponse>({ queryKey: ['transactions'] }, (old) => {
+        if (!old) return old;
+        const newCategory = categoryId ? (categoryById.get(categoryId) ?? null) : null;
+        return {
+          ...old,
+          items: old.items.map((it) =>
+            it.id === id ? { ...it, categoryId, category: newCategory } : it,
+          ),
+        };
+      });
+      return { snapshot };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.snapshot) {
+        for (const [key, data] of ctx.snapshot) {
+          queryClient.setQueryData(key, data);
+        }
+      }
+      setToast({ message: 'No se pudo guardar la categoría', tone: 'error' });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+    },
+  });
+
+  const ruleMutation = useMutation({
+    mutationFn: api.createCategorizationRule,
+    onSuccess: (resp) => {
+      const extra =
+        resp.appliedToCount > 0 ? ` · aplicada a ${resp.appliedToCount} mov. pasados` : '';
+      setToast({ message: `Regla creada${extra}`, tone: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['transactions'] });
+      setPendingRule(null);
+    },
+    onError: (err) => {
+      setToast({
+        message: `Error creando regla: ${err instanceof Error ? err.message : 'desconocido'}`,
+        tone: 'error',
+      });
+    },
+  });
+
+  function handleCategoryChange(tx: TransactionListItem, newCategoryId: string | null) {
+    if (newCategoryId === tx.categoryId) return;
+    const wasUncategorized = tx.categoryId === null;
+    patchMutation.mutate(
+      { id: tx.id, categoryId: newCategoryId },
+      {
+        onSuccess: () => {
+          if (wasUncategorized && newCategoryId) {
+            const category = categoryById.get(newCategoryId);
+            if (category) {
+              setPendingRule({
+                tx,
+                category,
+                suggestedRegex: suggestPatternFromDescription(tx.descriptionRaw),
+              });
+            }
+          }
+        },
+      },
+    );
+  }
 
   const items = txQuery.data?.items ?? [];
   const summary = txQuery.data?.summary;
@@ -116,7 +214,13 @@ export function MovimientosClient() {
             </div>
           ) : (
             <>
-              <TransactionsTable items={items} selectedId={selectedId} onSelect={setSelectedId} />
+              <TransactionsTable
+                items={items}
+                categories={categoriesQuery.data ?? []}
+                selectedId={selectedId}
+                onSelect={setSelectedId}
+                onCategoryChange={handleCategoryChange}
+              />
               {pageCount > 1 ? (
                 <div className="flex items-center justify-between text-xs text-[var(--color-muted)]">
                   <span>
@@ -157,6 +261,44 @@ export function MovimientosClient() {
             <TransactionDetail tx={selected} onClose={() => setSelectedId(null)} />
           </div>
         </div>
+      ) : null}
+
+      {pendingRule ? (
+        <CreateRuleDialog
+          tx={pendingRule.tx}
+          category={pendingRule.category}
+          initialRegex={pendingRule.suggestedRegex}
+          isCreating={ruleMutation.isPending}
+          onConfirm={({ regex, applyToExisting, restrictAccount }) =>
+            ruleMutation.mutate({
+              patternRegex: regex,
+              categoryId: pendingRule.category.id,
+              accountId: restrictAccount ? pendingRule.tx.accountId : null,
+              applyToExisting,
+              suggestedFromTransactionId: pendingRule.tx.id,
+            })
+          }
+          onDismiss={() => setPendingRule(null)}
+        />
+      ) : null}
+
+      {toast ? (
+        <output
+          className={`fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg text-sm shadow-lg text-white ${
+            toast.tone === 'success' ? 'bg-[var(--color-positive)]' : 'bg-[var(--color-negative)]'
+          }`}
+          onAnimationEnd={() => setToast(null)}
+        >
+          {toast.message}
+          <button
+            type="button"
+            onClick={() => setToast(null)}
+            className="ml-3 opacity-80 hover:opacity-100"
+            aria-label="Cerrar"
+          >
+            ✕
+          </button>
+        </output>
       ) : null}
     </div>
   );
