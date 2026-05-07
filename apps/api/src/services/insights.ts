@@ -216,6 +216,7 @@ type DetectedSubscription = {
   inferredCategoryId: string | null;
   inferredCurrency: string;
   lastBooked: Date;
+  amountKind: 'fixed' | 'variable';
 };
 
 async function detectRecurringSubscriptions(userId: string): Promise<InsightCandidate[]> {
@@ -343,14 +344,36 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     const mean = nums.reduce((acc, n) => acc + n, 0) / nums.length;
     if (mean === 0) continue;
 
-    const isVariableMerchant = activeRulesByName.get(key)?.amountKind === 'variable';
-    if (!isVariableMerchant) {
-      // Fixed-amount stability check for new merchants and existing fixed
-      // rules. True subscriptions charge the same cents every period.
-      const min = Math.min(...nums);
-      const max = Math.max(...nums);
-      const spread = max - min;
-      if (spread > 0.5 || spread / mean > 0.02) continue;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const spread = max - min;
+    const isFixedAmounts = spread <= 0.5 || spread / mean <= 0.02;
+    const existingRule = activeRulesByName.get(key);
+    const isExistingVariable = existingRule?.amountKind === 'variable';
+
+    let amountKind: 'fixed' | 'variable';
+    if (isExistingVariable) {
+      // Existing manual variable rule: skip stability check entirely so new
+      // utility bills get linked even when the swing is wide.
+      amountKind = 'variable';
+    } else if (isFixedAmounts) {
+      amountKind = 'fixed';
+    } else if (!existingRule) {
+      // No rule yet, amounts swing — try to autocreate as a variable bill, but
+      // only when the signal is strong enough to be confident this is a real
+      // recurring bill (utility) rather than habitual shopping at the same
+      // merchant.
+      const cadenceMean = avgDelta;
+      const cadenceVar = deltas.reduce((acc, d) => acc + (d - cadenceMean) ** 2, 0) / deltas.length;
+      const cadenceCv = Math.sqrt(cadenceVar) / cadenceMean;
+      const ratio = max / Math.max(min, 0.01);
+      const eligible = sorted.length >= 3 && cadenceCv <= 0.1 && ratio <= 1.5 && mean >= 15;
+      if (!eligible) continue;
+      amountKind = 'variable';
+    } else {
+      // Existing fixed rule + amounts no longer match → skip linking. The
+      // user can decide to convert it to variable manually.
+      continue;
     }
 
     const meanD = new Decimal(mean.toFixed(2));
@@ -372,6 +395,7 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
       inferredCategoryId: categoryIdSet.size === 1 ? (Array.from(categoryIdSet)[0] ?? null) : null,
       inferredCurrency: sorted[0]?.currency ?? 'EUR',
       lastBooked: lastTx.bookedAt,
+      amountKind,
     });
   }
 
@@ -393,12 +417,17 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     } else {
       const newRuleId = uuidv7();
       const nextExpectedAt = nextDateFor(sub.lastBooked, sub.frequency);
+      // Variable autocreates land as `bill` (typical for utilities); fixed
+      // ones default to `subscription`. The user can change either via the
+      // mark-recurring dialog (future: edit-rule flow).
+      const inferredKind = sub.amountKind === 'variable' ? 'bill' : 'subscription';
       await db.insert(recurringRules).values({
         id: newRuleId,
         userId,
         name: sub.display,
-        kind: 'subscription',
+        kind: inferredKind,
         frequency: sub.frequency,
+        amountKind: sub.amountKind,
         expectedAmount: sub.unitAmount.negated().toFixed(2),
         currency: sub.inferredCurrency,
         accountId: sub.inferredAccountId,
@@ -427,13 +456,18 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
     const annual = sub.unitAmount.times(annualizer);
     const cadenceLabel =
       sub.cadence === 'monthly' ? 'mensual' : sub.cadence === 'weekly' ? 'semanal' : 'anual';
+    const isVariable = sub.amountKind === 'variable';
+    const labelNoun = isVariable ? 'Factura' : 'Suscripción';
+    const amountHint = isVariable
+      ? `media ~${eur(sub.unitAmount)} (importe variable)`
+      : `${eur(sub.unitAmount)} cada uno`;
 
     candidates.push({
       kind: 'unused_subscription',
       signature: `recurring_subscription:${sub.key}`,
       severity: 'info',
-      title: `Suscripción ${cadenceLabel}: ${sub.display} — ${eur(annual)}/año`,
-      description: `${sub.occurrences} cargos detectados (cada ~${Math.round(sub.avgDelta)} días, ${eur(sub.unitAmount)} cada uno). Confirma si la usas o quítala.`,
+      title: `${labelNoun} ${cadenceLabel}: ${sub.display} — ${eur(annual)}/año`,
+      description: `${sub.occurrences} cargos detectados (cada ~${Math.round(sub.avgDelta)} días, ${amountHint}). Confirma o quítala.`,
       estimatedSavings: annual.toFixed(2),
       actionable: true,
       payload: {
@@ -441,6 +475,7 @@ async function detectRecurringSubscriptions(userId: string): Promise<InsightCand
         cadence: sub.cadence,
         unitAmount: sub.unitAmount.toFixed(2),
         occurrences: sub.occurrences,
+        amountKind: sub.amountKind,
         ruleId,
       },
     });
