@@ -253,19 +253,54 @@ function Body({ loan }: { loan: LoanDetail }) {
               {visibleSchedule.map((row) => {
                 const past = row.period <= loan.lastPaidPeriod;
                 const isNext = row.period === loan.lastPaidPeriod + 1;
+                const matched = row.matchedPayment;
+                const missed = past && !matched;
+                const expected = Number(row.payment);
+                const actual = matched ? Number(matched.actualPayment) : 0;
+                const delta = matched ? actual - expected : 0;
+                let statusLabel: string;
+                if (matched) {
+                  statusLabel = `✓ ${matched.bookedAt.slice(5)}`;
+                } else if (missed) {
+                  statusLabel = '⚠ sin cargo';
+                } else if (isNext) {
+                  statusLabel = '◀ siguiente';
+                } else {
+                  statusLabel = 'proyectada';
+                }
                 return (
                   <tr
                     key={row.period}
                     className={cn(
                       'border-t border-[var(--color-border)]',
-                      past && 'text-[var(--color-muted)]',
-                      isNext && 'bg-[var(--color-accent)]/5 font-medium',
+                      past && !matched && 'text-[var(--color-muted)]',
+                      matched && 'bg-[var(--color-positive)]/5',
+                      missed && 'bg-amber-500/5',
+                      isNext && !matched && 'bg-[var(--color-accent)]/5 font-medium',
                     )}
+                    title={
+                      matched
+                        ? `Pagado: ${matched.actualPayment} € · ${matched.descriptionRaw}`
+                        : undefined
+                    }
                   >
                     <td className="px-2 py-1.5 text-right tabular-nums">{row.period}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{formatMonth(row.dueAt)}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
-                      {formatEur(row.payment)}
+                      <div>{formatEur(row.payment)}</div>
+                      {matched && Math.abs(delta) >= 0.01 ? (
+                        <div
+                          className={cn(
+                            'text-[10px]',
+                            delta > 0
+                              ? 'text-[var(--color-negative)]'
+                              : 'text-[var(--color-positive)]',
+                          )}
+                        >
+                          {delta > 0 ? '+' : ''}
+                          {delta.toFixed(2)} €
+                        </div>
+                      ) : null}
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       {formatEur(row.principal)}
@@ -276,8 +311,14 @@ function Body({ loan }: { loan: LoanDetail }) {
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       {formatEur(row.outstandingAfter)}
                     </td>
-                    <td className="px-2 py-1.5 text-xs">
-                      {past ? 'pagada' : isNext ? '◀ siguiente' : 'proyectada'}
+                    <td
+                      className={cn(
+                        'px-2 py-1.5 text-xs whitespace-nowrap',
+                        matched && 'text-[var(--color-positive)] font-medium',
+                        missed && 'text-amber-600 dark:text-amber-400 font-medium',
+                      )}
+                    >
+                      {statusLabel}
                     </td>
                   </tr>
                 );
@@ -286,6 +327,29 @@ function Body({ loan }: { loan: LoanDetail }) {
           </table>
         </div>
       </Card>
+
+      {loan.orphanPayments.length > 0 ? (
+        <Card className="space-y-3">
+          <CardHeader
+            title="Pagos sin vincular"
+            subtitle="Cargos con descripción tipo préstamo dentro del rango del préstamo, sin pareja en la tabla. Suelen ser cuotas extras (revisión, intereses fuera de calendario)."
+          />
+          <ul className="text-sm space-y-1">
+            {loan.orphanPayments.map((p) => (
+              <li
+                key={p.transactionId}
+                className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] last:border-0 pb-1 last:pb-0"
+              >
+                <span className="text-[var(--color-muted)] text-xs whitespace-nowrap">
+                  {formatDate(p.bookedAt)}
+                </span>
+                <span className="flex-1 truncate text-xs">{p.descriptionRaw}</span>
+                <span className="font-medium tabular-nums">{formatEur(p.actualPayment)}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
 
       {showPrepayment ? (
         <PrepaymentDialog loan={loan} onClose={() => setShowPrepayment(false)} />

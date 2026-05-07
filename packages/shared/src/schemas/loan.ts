@@ -34,6 +34,14 @@ export const loanSummarySchema = z.object({
 });
 export type LoanSummary = z.infer<typeof loanSummarySchema>;
 
+export const loanPaymentMatchSchema = z.object({
+  transactionId: z.string().uuid(),
+  bookedAt: z.string().date(),
+  actualPayment: decimalString,
+  descriptionRaw: z.string(),
+});
+export type LoanPaymentMatch = z.infer<typeof loanPaymentMatchSchema>;
+
 export const loanScheduleRowSchema = z.object({
   period: z.number().int().positive(),
   dueAt: z.string().date(),
@@ -42,6 +50,7 @@ export const loanScheduleRowSchema = z.object({
   interest: decimalString,
   outstandingAfter: decimalString,
   rateApplied: decimalString,
+  matchedPayment: loanPaymentMatchSchema.nullable(),
 });
 export type LoanScheduleRow = z.infer<typeof loanScheduleRowSchema>;
 
@@ -61,6 +70,10 @@ export const loanDetailSchema = loanSummarySchema.extend({
   rateHistory: z.array(loanRateHistoryRowSchema),
   // The period the borrower is currently at (last fully past one).
   lastPaidPeriod: z.number().int().nonnegative(),
+  // Loan-shaped transactions that the matcher could not pin to any schedule
+  // row (different lender ref, off-by-too-many days, etc.). Surfaced for
+  // manual reconciliation.
+  orphanPayments: z.array(loanPaymentMatchSchema),
 });
 export type LoanDetail = z.infer<typeof loanDetailSchema>;
 

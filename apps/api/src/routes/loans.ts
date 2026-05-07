@@ -5,18 +5,18 @@ import {
   prepaymentSimulationInputSchema,
 } from '@gp/shared';
 import { Decimal } from 'decimal.js';
-import { and, asc, eq, isNull } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, lte } from 'drizzle-orm';
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { db } from '../db/index.js';
-import { loanRateHistory, loans } from '../db/schema.js';
+import { loanRateHistory, loans, transactions } from '../db/schema.js';
 import {
   type AmortizationRow,
   locateCurrentPeriod,
   simulatePrepayment,
   summarizeSchedule,
 } from '../services/amortization.js';
-import { buildSchedule } from '../services/loan-helpers.js';
+import { buildSchedule, matchLoanPayments } from '../services/loan-helpers.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
@@ -102,19 +102,52 @@ export const loansRoutes: FastifyPluginAsync = async (app) => {
     const today = new Date();
     const cur = locateCurrentPeriod(schedule, today);
 
+    // Pull negative debit transactions in the loan's window so the matcher
+    // can pin payments to schedule rows. The 30-day padding either side
+    // catches early/late payments without widening the search to the whole
+    // history.
+    const startDate = new Date(data.loan.startedAt);
+    startDate.setUTCDate(startDate.getUTCDate() - 30);
+    const lastDue = schedule[schedule.length - 1]?.dueAt;
+    const endDate = lastDue ? new Date(lastDue) : new Date();
+    endDate.setUTCDate(endDate.getUTCDate() + 30);
+
+    const txs = await db
+      .select({
+        id: transactions.id,
+        bookedAt: transactions.bookedAt,
+        amount: transactions.amount,
+        descriptionRaw: transactions.descriptionRaw,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.userId, DEFAULT_USER_ID),
+          isNull(transactions.deletedAt),
+          isNull(transactions.transferPairId),
+          eq(transactions.isProjection, false),
+          lte(transactions.amount, '0'),
+          gte(transactions.bookedAt, startDate),
+          lte(transactions.bookedAt, endDate),
+        ),
+      );
+
+    const matched = matchLoanPayments(schedule, txs);
+
     const detail: LoanDetail = {
       ...summary,
       principalInitial: data.loan.principalInitial,
       prepaymentFeePct: data.loan.prepaymentFeePct,
       fiscalDeductible: data.loan.fiscalDeductible,
       notes: data.loan.notes,
-      schedule,
+      schedule: matched.rows,
       rateHistory: data.rateRows.map((r) => ({
         effectiveAt: toIsoDate(r.effectiveAt),
         rate: r.rate,
         source: r.source,
       })),
       lastPaidPeriod: cur.lastPaidPeriod,
+      orphanPayments: matched.orphans,
     };
     return detail;
   });
