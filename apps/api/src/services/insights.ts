@@ -197,6 +197,118 @@ async function detectLowSavingsRate(userId: string): Promise<InsightCandidate[]>
   ];
 }
 
+// Patterns to skip in subscription detection (loan/mortgage charges are
+// recurring but already covered by the mortgage detector + their own UI).
+const LOAN_DESCRIPTION_RE = /\b(hipoteca|prestamo|préstamo|loan|rcbo|mortgage|cuota)\b/i;
+
+async function detectRecurringSubscriptions(userId: string): Promise<InsightCandidate[]> {
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const rows = await db
+    .select({
+      merchantRaw: sql<
+        string | null
+      >`COALESCE(NULLIF(${transactions.normalizedMerchant}, ''), ${transactions.descriptionRaw})`,
+      bookedAt: transactions.bookedAt,
+      amount: transactions.amount,
+      description: transactions.descriptionRaw,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.userId, userId),
+        isNull(transactions.deletedAt),
+        isNull(transactions.transferPairId),
+        eq(transactions.isProjection, false),
+        gte(transactions.bookedAt, sixMonthsAgo),
+        lte(transactions.amount, '0'),
+      ),
+    );
+
+  type Group = { display: string; dates: Date[]; amounts: Decimal[] };
+  const groups = new Map<string, Group>();
+  for (const r of rows) {
+    if (!r.merchantRaw) continue;
+    const display = r.merchantRaw.trim();
+    if (!display) continue;
+    if (LOAN_DESCRIPTION_RE.test(r.description) || LOAN_DESCRIPTION_RE.test(display)) continue;
+    const key = display.toLowerCase();
+    const g = groups.get(key) ?? { display, dates: [], amounts: [] };
+    g.dates.push(new Date(r.bookedAt));
+    g.amounts.push(new Decimal(r.amount).abs());
+    groups.set(key, g);
+  }
+
+  const candidates: InsightCandidate[] = [];
+  const now = Date.now();
+  for (const [key, g] of groups) {
+    if (g.dates.length < 2) continue;
+    g.dates.sort((a, b) => a.getTime() - b.getTime());
+
+    const deltas: number[] = [];
+    for (let i = 1; i < g.dates.length; i++) {
+      const a = g.dates[i - 1];
+      const b = g.dates[i];
+      if (!a || !b) continue;
+      deltas.push((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24));
+    }
+    if (deltas.length === 0) continue;
+    const avgDelta = deltas.reduce((acc, d) => acc + d, 0) / deltas.length;
+
+    let cadence: 'monthly' | 'weekly' | 'yearly' | null = null;
+    if (avgDelta >= 25 && avgDelta <= 35) cadence = 'monthly';
+    else if (avgDelta >= 6 && avgDelta <= 8) cadence = 'weekly';
+    else if (avgDelta >= 350 && avgDelta <= 380) cadence = 'yearly';
+    if (!cadence) continue;
+
+    // Skip subscriptions that look discontinued: most recent charge older
+    // than 1.75x the cadence. (Prevents flagging cancelled trials.)
+    const lastDate = g.dates[g.dates.length - 1];
+    if (!lastDate) continue;
+    const daysSinceLast = (now - lastDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (daysSinceLast > avgDelta * 1.75) continue;
+
+    // Require near-identical amounts (within 2 % drift AND ≤ 0.50 € absolute
+    // spread). True subscriptions charge the same cents every period; close-
+    // but-not-identical amounts are usually habitual purchases (gas stations,
+    // groceries, utilities) that we don't want to flag as cancellable.
+    const nums = g.amounts.map((a) => a.toNumber());
+    const mean = nums.reduce((acc, n) => acc + n, 0) / nums.length;
+    if (mean === 0) continue;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const spread = max - min;
+    if (spread > 0.5 || spread / mean > 0.02) continue;
+
+    const meanD = new Decimal(mean.toFixed(2));
+    if (meanD.lessThan(3)) continue;
+
+    const annualizer = cadence === 'monthly' ? 12 : cadence === 'weekly' ? 52 : 1;
+    const annual = meanD.times(annualizer);
+
+    const cadenceLabel =
+      cadence === 'monthly' ? 'mensual' : cadence === 'weekly' ? 'semanal' : 'anual';
+
+    candidates.push({
+      kind: 'unused_subscription',
+      signature: `recurring_subscription:${key}`,
+      severity: 'info',
+      title: `Suscripción ${cadenceLabel}: ${g.display} — ${eur(annual)}/año`,
+      description: `${g.dates.length} cargos detectados (cada ~${Math.round(avgDelta)} días, ${eur(meanD)} cada uno). ¿Sigues usándola?`,
+      estimatedSavings: annual.toFixed(2),
+      actionable: true,
+      payload: {
+        merchant: g.display,
+        cadence,
+        unitAmount: meanD.toFixed(2),
+        occurrences: g.dates.length,
+      },
+    });
+  }
+  return candidates;
+}
+
 async function detectHighFees(userId: string): Promise<InsightCandidate[]> {
   // Sum all transactions whose description matches commission-like patterns
   // over the last 12 months.
@@ -254,13 +366,14 @@ export async function refreshInsights(userId: string): Promise<void> {
     loansData.push({ loan, schedule });
   }
 
-  const [idle, mort, low, fees] = await Promise.all([
+  const [idle, mort, low, fees, subs] = await Promise.all([
     detectIdleLiquidity(userId),
     detectMortgageRate(userId, loansData),
     detectLowSavingsRate(userId),
     detectHighFees(userId),
+    detectRecurringSubscriptions(userId),
   ]);
-  const candidates = [...idle, ...mort, ...low, ...fees];
+  const candidates = [...idle, ...mort, ...low, ...fees, ...subs];
 
   // Skip candidates whose signature matches a dismissed/acted insight (preserve
   // the user's choice across refreshes).
