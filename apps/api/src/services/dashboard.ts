@@ -9,6 +9,7 @@ import {
   recurringRules,
   transactions,
 } from '../db/schema.js';
+import { refreshInsights } from './insights.js';
 
 const LARGE_EXPENSE_THRESHOLD = '200.00';
 const UPCOMING_DAYS = 30;
@@ -368,6 +369,10 @@ async function computeInsights(userId: string): Promise<Dashboard['insights']> {
 // ────────────────────────────────────────────────────────────────────────────
 
 export async function buildDashboard(userId: string): Promise<Dashboard> {
+  // Regenerate insights on every dashboard load. Cheap (a handful of
+  // SUM queries) and keeps the feed in sync with the latest data.
+  await refreshInsights(userId);
+
   const now = new Date();
   const thisMonthStart = startOfMonth(now);
   const nextMonthStart = addMonths(thisMonthStart, 1);

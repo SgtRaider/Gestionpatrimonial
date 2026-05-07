@@ -12,12 +12,11 @@ import { db } from '../db/index.js';
 import { loanRateHistory, loans } from '../db/schema.js';
 import {
   type AmortizationRow,
-  type RateChange,
-  generateSchedule,
   locateCurrentPeriod,
   simulatePrepayment,
   summarizeSchedule,
 } from '../services/amortization.js';
+import { buildSchedule } from '../services/loan-helpers.js';
 
 const DEFAULT_USER_ID = '01951b00-0000-7000-8000-000000000001';
 
@@ -38,29 +37,6 @@ async function loadLoanWithRates(loanId: string) {
     .where(eq(loanRateHistory.loanId, loan.id))
     .orderBy(asc(loanRateHistory.effectiveAt));
   return { loan, rateRows };
-}
-
-function buildSchedule(
-  loan: typeof loans.$inferSelect,
-  rateRows: (typeof loanRateHistory.$inferSelect)[],
-): AmortizationRow[] {
-  const rates: RateChange[] =
-    rateRows.length > 0
-      ? rateRows.map((r) => ({ effectiveAt: new Date(r.effectiveAt), rate: r.rate }))
-      : [
-          {
-            effectiveAt: new Date(loan.startedAt),
-            rate: loan.rateFixed ?? loan.rateSpread ?? '0',
-          },
-        ];
-
-  return generateSchedule({
-    principalInitial: loan.principalInitial,
-    termMonths: loan.termMonths,
-    startDate: new Date(loan.startedAt),
-    amortizationSystem: loan.amortizationSystem,
-    rates,
-  });
 }
 
 function buildSummary(loan: typeof loans.$inferSelect, schedule: AmortizationRow[]): LoanSummary {
